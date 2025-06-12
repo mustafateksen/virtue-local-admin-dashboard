@@ -89,26 +89,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
           </nav>
 
           {/* User info and logout */}
-          <div className="border-t border-border p-4">
-            <div className="flex items-center mb-3">
+          <div className="border-t border-border p-4 lg:p-6">
+            <div className="flex items-center mb-4 lg:mb-6">
               <div className="flex-shrink-0">
-                <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
-                  <span className="text-sm font-medium text-secondary-foreground">
+                <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-full bg-secondary flex items-center justify-center">
+                  <span className="text-base lg:text-lg font-medium text-secondary-foreground">
                     {user?.name?.charAt(0).toUpperCase()}
                   </span>
                 </div>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-foreground">{user?.name}</p>
-                <p className="text-xs text-muted-foreground">@{user?.username}</p>
+              <div className="ml-4 min-w-0 flex-1">
+                <p className="text-base lg:text-lg font-medium text-foreground truncate">{user?.name}</p>
+                <p className="text-sm lg:text-base text-muted-foreground truncate">@{user?.username}</p>
               </div>
             </div>
             <button
               onClick={logout}
-              className="flex items-center w-full px-2 py-2 text-sm font-medium text-muted-foreground rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex items-center w-full px-4 py-3 lg:py-4 text-base lg:text-lg font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              <LogOut className="mr-3 h-5 w-5 text-muted-foreground" />
-              Logout
+              <LogOut className="mr-4 h-6 w-6 lg:h-7 lg:w-7 text-muted-foreground" />
+              <span>Logout</span>
             </button>
           </div>
         </div>

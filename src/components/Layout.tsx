@@ -18,32 +18,32 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       )}
       
-      <div className={`${isAuthenticated ? 'lg:ml-64' : ''}`}>
+      <div className={`${isAuthenticated ? 'lg:ml-72' : ''}`}>
         {isAuthenticated && (
           <div className="sticky top-0 z-40 lg:mx-auto lg:max-w-7xl lg:px-8">
-            <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-0 bg-card border-b border-border">
+            <div className="flex items-center justify-between h-16 lg:h-20 px-4 sm:px-6 lg:px-0 bg-card border-b border-border">
               <button
                 type="button"
-                className="lg:hidden text-muted-foreground hover:text-foreground"
+                className="lg:hidden text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
                 onClick={() => setSidebarOpen(true)}
               >
                 <Menu className="h-6 w-6" />
               </button>
               
               <div className="flex-1 flex justify-center lg:justify-start">
-                <h2 className="text-xl font-semibold text-foreground">
+                <h2 className="text-xl lg:text-2xl xl:text-3xl font-semibold text-foreground">
                   Admin Dashboard
                 </h2>
               </div>
 
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 sm:space-x-4">
                 <ThemeToggle />
               </div>
             </div>
           </div>
         )}
         
-        <main className={`${isAuthenticated ? 'py-6' : ''}`}>
+        <main className={`${isAuthenticated ? 'py-6 lg:py-8' : ''}`}>
           <div className={`${isAuthenticated ? 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8' : ''}`}>
             {children}
           </div>
