@@ -7,7 +7,7 @@ import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import MonitorPage from './pages/MonitorPage';
-import StoragePage from './pages/StoragePage';
+import LogsPage from './pages/LogsPage';
 import NetworkPage from './pages/NetworkPage';
 import DevicesPage from './pages/DevicesPage';
 import SettingsPage from './pages/SettingsPage';
@@ -34,9 +34,9 @@ function App() {
                   <MonitorPage />
                 </PrivateRoute>
               } />
-              <Route path="/storage" element={
+              <Route path="/logs" element={
                 <PrivateRoute>
-                  <StoragePage />
+                  <LogsPage />
                 </PrivateRoute>
               } />
               <Route path="/network" element={

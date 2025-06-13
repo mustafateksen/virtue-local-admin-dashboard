@@ -10,10 +10,13 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -25,7 +28,7 @@ interface SidebarProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'System Monitor', href: '/monitor', icon: Monitor },
-  { name: 'Storage', href: '/storage', icon: HardDrive },
+  { name: 'Logs', href: '/logs', icon: HardDrive },
   { name: 'Network', href: '/network', icon: Network },
   { name: 'Raspberry Devices', href: '/devices', icon: Users },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -38,7 +41,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsMobileOpen 
 }) => {
   const location = useLocation();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { logout, isAuthenticated } = useAuth();
+  const { theme, setTheme } = useTheme();
+
+  const toggleTheme = () => {
+    if (theme === 'light') {
+      setTheme('dark');
+    } else {
+      setTheme('light');
+    }
+  };
+
+  const getThemeIcon = () => {
+    switch (theme) {
+      case 'light':
+        return Sun;
+      case 'dark':
+        return Moon;
+      default:
+        return Sun;
+    }
+  };
+
+  const getThemeName = () => {
+    switch (theme) {
+      case 'light':
+        return 'Light Mode';
+      case 'dark':
+        return 'Dark Mode';
+      default:
+        return 'Light Mode';
+    }
+  };
 
   if (!isAuthenticated) {
     return null;
@@ -49,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile backdrop */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/80 z-40 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -62,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // Mobile show/hide
         isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         // Desktop width
-        isCollapsed ? "lg:w-16" : "lg:w-64",
+        isCollapsed ? "lg:w-18" : "lg:w-64",
         // Mobile width
         "w-64"
       )}>
@@ -79,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => setIsMobileOpen(false)}
             className="lg:hidden text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5 cursor-pointer" />
           </button>
           
           {/* Desktop collapse button */}
@@ -88,16 +122,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="hidden lg:flex text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
           >
             {isCollapsed ? (
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-6 w-6 cursor-pointer" />
             ) : (
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="h-6 w-6 cursor-pointer" />
             )}
           </button>
         </div>
 
         <div className="flex flex-col h-full">
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1">
+          {/* Navigation - positioned at top */}
+          <nav className="px-3 py-4 space-y-1">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -135,37 +169,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </nav>
 
-          {/* User section */}
-          <div className="border-t border-border p-3">
-            <div className={cn(
-              "flex items-center mb-3",
-              isCollapsed ? "justify-center" : ""
-            )}>
-              <div className="flex-shrink-0">
-                <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
-                  <span className="text-sm font-medium text-secondary-foreground">
-                    {user?.name?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              </div>
-              {!isCollapsed && (
-                <div className="ml-3 min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">@{user?.username}</p>
+          {/* Spacer to push bottom content to the very bottom */}
+          <div className="flex-1"></div>
+
+          {/* Bottom section - positioned at the absolute bottom */}
+          <div className="border-t border-border p-3 space-y-2">
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className={cn(
+                "group flex items-center w-full px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
+                isCollapsed ? "justify-center" : ""
+              )}
+              title={isCollapsed ? getThemeName() : undefined}
+            >
+              {React.createElement(getThemeIcon(), {
+                className: cn(
+                  "h-5 w-5 flex-shrink-0",
+                  isCollapsed ? "mr-0" : "mr-3"
+                )
+              })}
+              {!isCollapsed && <span>{getThemeName()}</span>}
+              
+              {isCollapsed && (
+                <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  {getThemeName()}
                 </div>
               )}
-            </div>
+            </button>
             
+            {/* Logout button */}
             <button
               onClick={logout}
               className={cn(
-                "flex items-center w-full px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors group",
+                "group flex items-center w-full px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
                 isCollapsed ? "justify-center" : ""
               )}
               title={isCollapsed ? "Logout" : undefined}
             >
               <LogOut className={cn(
-                "h-5 w-5 text-muted-foreground",
+                "h-5 w-5 flex-shrink-0",
                 isCollapsed ? "mr-0" : "mr-3"
               )} />
               {!isCollapsed && <span>Logout</span>}
