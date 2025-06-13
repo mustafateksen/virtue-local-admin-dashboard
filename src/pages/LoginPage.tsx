@@ -103,7 +103,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="group relative w-full flex justify-center py-3 sm:py-4 lg:py-5 px-4 border border-transparent text-base sm:text-lg lg:text-xl font-medium rounded-lg text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="group relative w-full flex justify-center py-3 sm:py-4 lg:py-5 px-4 border border-transparent text-base sm:text-lg lg:text-xl font-medium rounded-lg text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all duration-200"
               >
                 {loading ? 'Signing in...' : 'Sign in'}
               </button>

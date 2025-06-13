@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend:setup": "cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
+    "backend:dev": "cd backend && ./venv/bin/python app.py",
+    "backend:prod": "cd backend && ./venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app",
+    "dev:full": "concurrently \"npm run backend:dev\" \"npm run dev\"",
+    "start": "npm run dev:full"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -34,6 +39,7 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.1.2",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
