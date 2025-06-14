@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, HardDrive, Cpu, Wifi, Activity, Server } from 'lucide-react';
+import { Monitor, HardDrive, Cpu, Wifi, Activity, Server,FileWarning } from 'lucide-react';
 
 const DashboardCard: React.FC<{
   title: string;
@@ -131,8 +131,8 @@ export const DashboardPage: React.FC = () => {
                   <div className="text-right ml-4">
                     <span className={`inline-flex px-3 py-1 lg:px-4 lg:py-2 text-sm lg:text-base font-semibold rounded-full ${
                       device.status === 'Online' 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-                        : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400' 
+                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400'
                     }`}>
                       {device.status}
                     </span>
@@ -157,8 +157,8 @@ export const DashboardPage: React.FC = () => {
               <span>System Monitor</span>
             </button>
             <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
-              <HardDrive className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>Storage Manager</span>
+              <FileWarning className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
+              <span>Log Manager</span>
             </button>
             <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
               <Wifi className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />

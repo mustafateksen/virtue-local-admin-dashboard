@@ -3,10 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Monitor, 
-  HardDrive, 
+  FileWarning, 
   Network, 
   Settings, 
-  Users, 
+  Cpu, 
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -26,12 +26,15 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'System Monitor', href: '/monitor', icon: Monitor },
-  { name: 'Logs', href: '/logs', icon: HardDrive },
-  { name: 'Network', href: '/network', icon: Network },
-  { name: 'Raspberry Devices', href: '/devices', icon: Users },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, type: 'link' },
+  { name: 'System Monitor', href: '/monitor', icon: Monitor, type: 'link' },
+  { name: 'Logs', href: '/logs', icon: FileWarning, type: 'link' },
+  { name: 'Network', href: '/network', icon: Network, type: 'link' },
+  { name: 'Raspberry Devices', href: '/devices', icon: Cpu, type: 'link' },
+  { name: 'Settings', href: '/settings', icon: Settings, type: 'link' },
+  { name: 'divider', type: 'divider' },
+  { name: 'Theme Toggle', icon: 'theme', type: 'button', action: 'toggleTheme' },
+  { name: 'Logout', icon: LogOut, type: 'button', action: 'logout' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -96,16 +99,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // Mobile show/hide
         isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         // Desktop width
-        isCollapsed ? "lg:w-18" : "lg:w-64",
+        isCollapsed ? "lg:w-19" : "lg:w-72",
         // Mobile width
-        "w-64"
+        "w-72"
       )}>
         {/* Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-border">
           {!isCollapsed && (
-            <h1 className="text-lg font-bold text-foreground truncate">
-              Virtue Admin
-            </h1>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/virtue24-square.png" 
+                alt="Virtue Logo" 
+                className={cn(
+                  "w-8 h-8 transition-all duration-200",
+                  theme === 'dark' ? "brightness-0 invert" : ""
+                )}
+              />
+              <h1 className="text-xl font-bold text-foreground truncate">
+                Virtue Admin
+              </h1>
+            </div>
           )}
           
           {/* Mobile close button */}
@@ -132,94 +145,106 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex flex-col h-full">
           {/* Navigation - positioned at top */}
           <nav className="px-3 py-4 space-y-1">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={cn(
-                    "group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-colors relative",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  onClick={() => setIsMobileOpen(false)}
-                  title={isCollapsed ? item.name : undefined}
-                >
-                  <item.icon
+            {navigation.map((item, index) => {
+              // Divider
+              if (item.type === 'divider') {
+                return <div key={index} className="my-2 border-t border-border"></div>;
+              }
+
+              // Link items
+              if (item.type === 'link') {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href!}
                     className={cn(
-                      "flex-shrink-0 h-6 w-6",
-                      isCollapsed ? "mr-0" : "mr-3",
-                      isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-accent-foreground"
+                      "group flex items-center px-3 py-3 text-base font-medium rounded-lg transition-colors relative",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     )}
-                  />
-                  {!isCollapsed && (
-                    <span className="truncate">{item.name}</span>
-                  )}
-                  
-                  {/* Tooltip for collapsed state */}
-                  {isCollapsed && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                      {item.name}
-                    </div>
-                  )}
-                </Link>
-              );
+                    onClick={() => setIsMobileOpen(false)}
+                    title={isCollapsed ? item.name : undefined}
+                  >
+                    {React.createElement(item.icon as React.ComponentType<any>, {
+                      className: cn(
+                        "flex-shrink-0 h-6 w-6",
+                        isCollapsed ? "mr-0" : "mr-3",
+                        isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-accent-foreground"
+                      )
+                    })}
+                    {!isCollapsed && (
+                      <span className="truncate">{item.name}</span>
+                    )}
+                    
+                    {/* Tooltip for collapsed state */}
+                    {isCollapsed && (
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        {item.name}
+                      </div>
+                    )}
+                  </Link>
+                );
+              }
+
+              // Button items
+              if (item.type === 'button') {
+                const handleClick = () => {
+                  if (item.action === 'toggleTheme') {
+                    toggleTheme();
+                  } else if (item.action === 'logout') {
+                    logout();
+                  }
+                };
+
+                const getIcon = () => {
+                  if (item.action === 'toggleTheme') {
+                    return getThemeIcon();
+                  }
+                  return item.icon as React.ComponentType<any>;
+                };
+
+                const getDisplayName = () => {
+                  if (item.action === 'toggleTheme') {
+                    return getThemeName();
+                  }
+                  return item.name;
+                };
+
+                return (
+                  <button
+                    key={item.name}
+                    onClick={handleClick}
+                    className={cn(
+                      "group flex items-center w-full px-3 py-3 text-base font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
+                      isCollapsed ? "justify-center" : ""
+                    )}
+                    title={isCollapsed ? getDisplayName() : undefined}
+                  >
+                    {React.createElement(getIcon(), {
+                      className: cn(
+                        "flex-shrink-0 h-6 w-6",
+                        isCollapsed ? "mr-0" : "mr-3"
+                      )
+                    })}
+                    {!isCollapsed && <span className="truncate">{getDisplayName()}</span>}
+                    
+                    {isCollapsed && (
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        {getDisplayName()}
+                      </div>
+                    )}
+                  </button>
+                );
+              }
+
+              return null;
             })}
           </nav>
 
-          {/* Spacer to push bottom content to the very bottom */}
+          {/* Spacer to push content to the very bottom if needed */}
           <div className="flex-1"></div>
-
-          {/* Bottom section - positioned at the absolute bottom */}
-          <div className="border-t border-border p-3 space-y-2">
-            {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              className={cn(
-                "group flex items-center w-full px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
-                isCollapsed ? "justify-center" : ""
-              )}
-              title={isCollapsed ? getThemeName() : undefined}
-            >
-              {React.createElement(getThemeIcon(), {
-                className: cn(
-                  "h-5 w-5 flex-shrink-0",
-                  isCollapsed ? "mr-0" : "mr-3"
-                )
-              })}
-              {!isCollapsed && <span>{getThemeName()}</span>}
-              
-              {isCollapsed && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  {getThemeName()}
-                </div>
-              )}
-            </button>
-            
-            {/* Logout button */}
-            <button
-              onClick={logout}
-              className={cn(
-                "group flex items-center w-full px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
-                isCollapsed ? "justify-center" : ""
-              )}
-              title={isCollapsed ? "Logout" : undefined}
-            >
-              <LogOut className={cn(
-                "h-5 w-5 flex-shrink-0",
-                isCollapsed ? "mr-0" : "mr-3"
-              )} />
-              {!isCollapsed && <span>Logout</span>}
-              
-              {isCollapsed && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  Logout
-                </div>
-              )}
-            </button>
-          </div>
         </div>
       </div>
     </>
