@@ -236,7 +236,7 @@ export const LogsPage: React.FC = () => {
       {/* Modal */}
       {modalOpen && selectedLog && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/20 backdrop-blur-sm p-4"
           onClick={handleCloseModal}
         >
           <div
@@ -254,7 +254,7 @@ export const LogsPage: React.FC = () => {
                 </p>
               </div>
               <button
-                className="p-2 hover:bg-accent rounded-md transition-colors"
+                className="p-2 hover:bg-accent rounded-md transition-colors cursor-pointer"
                 onClick={handleCloseModal}
                 title="Close"
               >
