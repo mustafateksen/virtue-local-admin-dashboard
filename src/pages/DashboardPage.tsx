@@ -1,68 +1,14 @@
 import React from 'react';
-import { Monitor, HardDrive, Cpu, Wifi, Activity, Server,FileWarning } from 'lucide-react';
-
-const DashboardCard: React.FC<{
-  title: string;
-  value: string;
-  subValue?: string;
-  icon: React.ReactNode;
-  color: string;
-}> = ({ title, value, subValue, icon, color }) => (
-  <div className="bg-card rounded-lg shadow border border-border p-6 lg:p-8 hover:shadow-lg transition-shadow">
-    <div className="flex items-center">
-      <div className={`flex-shrink-0 p-3 lg:p-4 rounded-lg ${color}`}>
-        <div className="h-6 w-6 lg:h-8 lg:w-8">{icon}</div>
-      </div>
-      <div className="ml-5 lg:ml-6 w-0 flex-1">
-        <dl>
-          <dt className="text-sm lg:text-base font-medium text-muted-foreground truncate">{title}</dt>
-          <dd className="text-xl lg:text-2xl xl:text-3xl font-bold text-foreground">{value}</dd>
-          {subValue && (
-            <dd className="text-sm lg:text-base text-muted-foreground">{subValue}</dd>
-          )}
-        </dl>
-      </div>
-    </div>
-  </div>
-);
+import { useNavigate } from 'react-router-dom';
+import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  // Mock data - these will be replaced with real API calls
-  const systemStats = [
-    {
-      title: 'CPU Usage',
-      value: '45%',
-      subValue: '2.1 GHz',
-      icon: <Cpu className="h-full w-full text-primary-foreground" />,
-      color: 'bg-blue-500',
-    },
-    {
-      title: 'Memory Usage',
-      value: '2.8 GB',
-      subValue: '70% of 4GB',
-      icon: <Monitor className="h-full w-full text-primary-foreground" />,
-      color: 'bg-green-500',
-    },
-    {
-      title: 'Disk Space',
-      value: '45.2 GB',
-      subValue: '60% of 75GB',
-      icon: <HardDrive className="h-full w-full text-primary-foreground" />,
-      color: 'bg-yellow-500',
-    },
-    {
-      title: 'Network',
-      value: 'Connected',
-      subValue: '192.168.1.100',
-      icon: <Wifi className="h-full w-full text-primary-foreground" />,
-      color: 'bg-purple-500',
-    },
-  ];
+  const navigate = useNavigate();
 
   const connectedDevices = [
-    { name: 'Raspberry Pi #001', ip: '192.168.1.101', status: 'Online', uptime: '2d 5h' },
-    { name: 'Raspberry Pi #002', ip: '192.168.1.102', status: 'Online', uptime: '1d 12h' },
-    { name: 'Raspberry Pi #003', ip: '192.168.1.103', status: 'Offline', uptime: '-' },
+    { name: 'Compute Module #001', ip: '192.168.1.101', status: 'Online', uptime: '2d 5h' },
+    { name: 'Compute Module #002', ip: '192.168.1.102', status: 'Online', uptime: '1d 12h' },
+    { name: 'Compute Module #003', ip: '192.168.1.103', status: 'Offline', uptime: '-' },
   ];
 
   return (
@@ -70,15 +16,8 @@ export const DashboardPage: React.FC = () => {
       <div>
         <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-foreground">Dashboard</h1>
         <p className="mt-3 lg:mt-4 text-base sm:text-lg lg:text-xl text-muted-foreground">
-          Overview of your Raspberry Pi cluster and system status
+          Overview of your Main Terminal Cluster and System status
         </p>
-      </div>
-
-      {/* System Stats Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
-        {systemStats.map((stat, index) => (
-          <DashboardCard key={index} {...stat} />
-        ))}
       </div>
 
       {/* System Information */}
@@ -87,9 +26,49 @@ export const DashboardPage: React.FC = () => {
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
           <div className="px-6 py-6 sm:p-8">
             <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
-              System Status
+              Main Terminal
             </h3>
             <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Cpu className="h-6 w-6 lg:h-7 lg:w-7 text-blue-500 mr-3 lg:mr-4" />
+                  <span className="text-base lg:text-lg text-foreground">CPU Usage</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base lg:text-lg font-medium text-foreground">45%</span>
+                  <p className="text-sm text-muted-foreground">2.1 GHz</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Monitor className="h-6 w-6 lg:h-7 lg:w-7 text-green-500 mr-3 lg:mr-4" />
+                  <span className="text-base lg:text-lg text-foreground">Memory Usage</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base lg:text-lg font-medium text-foreground">2.8 GB</span>
+                  <p className="text-sm text-muted-foreground">70% of 4GB</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <HardDrive className="h-6 w-6 lg:h-7 lg:w-7 text-yellow-500 mr-3 lg:mr-4" />
+                  <span className="text-base lg:text-lg text-foreground">Disk Space</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base lg:text-lg font-medium text-foreground">45.2 GB</span>
+                  <p className="text-sm text-muted-foreground">60% of 75GB</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Server className="h-6 w-6 lg:h-7 lg:w-7 text-purple-500 mr-3 lg:mr-4" />
+                  <span className="text-base lg:text-lg text-foreground">Network</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base lg:text-lg font-medium text-green-600">Connected</span>
+                  <p className="text-sm text-muted-foreground">192.168.1.100</p>
+                </div>
+              </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Activity className="h-6 w-6 lg:h-7 lg:w-7 text-green-500 mr-3 lg:mr-4" />
@@ -103,13 +82,6 @@ export const DashboardPage: React.FC = () => {
                   <span className="text-base lg:text-lg text-foreground">Uptime</span>
                 </div>
                 <span className="text-base lg:text-lg font-medium text-foreground">5d 12h 34m</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Monitor className="h-6 w-6 lg:h-7 lg:w-7 text-purple-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">Load Average</span>
-                </div>
-                <span className="text-base lg:text-lg font-medium text-foreground">0.65, 0.58, 0.42</span>
               </div>
             </div>
           </div>
@@ -141,6 +113,17 @@ export const DashboardPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            
+            {/* See All Button */}
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => navigate('/devices')}
+                className="cursor-pointer flex items-center gap-2 text-primary hover:text-primary/80 transition-colors text-sm lg:text-base font-medium"
+              >
+                See All
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -152,21 +135,33 @@ export const DashboardPage: React.FC = () => {
             Quick Actions
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-            <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
+            <button 
+              onClick={() => navigate('/monitor')}
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+            >
               <Monitor className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>System Monitor</span>
             </button>
-            <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
+            <button 
+              onClick={() => navigate('/logs')}
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+            >
               <FileWarning className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>Log Manager</span>
+              <span>Logs</span>
             </button>
-            <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
-              <Wifi className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>Network Config</span>
+            <button 
+              onClick={() => navigate('/devices')}
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+            >
+              <Cpu className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
+              <span>All Devices</span>
             </button>
-            <button className="flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md">
-              <Server className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>Device Manager</span>
+            <button 
+              onClick={() => navigate('/apps')}
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+            >
+              <Package className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
+              <span>Apps</span>
             </button>
           </div>
         </div>

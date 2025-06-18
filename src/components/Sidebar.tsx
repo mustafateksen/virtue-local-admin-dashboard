@@ -3,8 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Monitor, 
-  FileWarning, 
-  Network, 
+  FileWarning,
   Settings, 
   Cpu, 
   LogOut,
@@ -12,7 +11,8 @@ import {
   ChevronRight,
   X,
   Sun,
-  Moon
+  Moon,
+  Package
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,8 +29,8 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, type: 'link' },
   { name: 'System Monitor', href: '/monitor', icon: Monitor, type: 'link' },
   { name: 'Logs', href: '/logs', icon: FileWarning, type: 'link' },
-  { name: 'Network', href: '/network', icon: Network, type: 'link' },
-  { name: 'Raspberry Devices', href: '/devices', icon: Cpu, type: 'link' },
+  { name: 'All Devices', href: '/devices', icon: Cpu, type: 'link' },
+  { name: 'Apps', href: '/apps', icon: Package, type: 'link' },
   { name: 'Settings', href: '/settings', icon: Settings, type: 'link' },
   { name: 'divider', type: 'divider' },
   { name: 'Theme Toggle', icon: 'theme', type: 'button', action: 'toggleTheme' },

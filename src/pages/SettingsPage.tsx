@@ -320,11 +320,11 @@ export const SettingsPage: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-4">Theme</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {['light', 'dark', 'system'].map((themeOption) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {['light', 'dark'].map((themeOption) => (
             <button
               key={themeOption}
-              onClick={() => setTheme(themeOption as 'light' | 'dark' | 'system')}
+              onClick={() => setTheme(themeOption as 'light' | 'dark')}
               className={`p-4 rounded-lg border-2 transition-colors text-base lg:text-lg capitalize ${
                 theme === themeOption
                   ? 'border-primary bg-primary/10'

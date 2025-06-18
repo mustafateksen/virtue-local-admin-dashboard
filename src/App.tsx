@@ -8,13 +8,13 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import MonitorPage from './pages/MonitorPage';
 import LogsPage from './pages/LogsPage';
-import NetworkPage from './pages/NetworkPage';
 import DevicesPage from './pages/DevicesPage';
+import AppsPage from './pages/AppsPage';
 import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="virtue-ui-theme">
+    <ThemeProvider defaultTheme="light" storageKey="virtue-ui-theme">
       <AuthProvider>
         <Router>
           <Layout>
@@ -39,14 +39,14 @@ function App() {
                   <LogsPage />
                 </PrivateRoute>
               } />
-              <Route path="/network" element={
-                <PrivateRoute>
-                  <NetworkPage />
-                </PrivateRoute>
-              } />
               <Route path="/devices" element={
                 <PrivateRoute>
                   <DevicesPage />
+                </PrivateRoute>
+              } />
+              <Route path="/apps" element={
+                <PrivateRoute>
+                  <AppsPage />
                 </PrivateRoute>
               } />
               <Route path="/settings" element={

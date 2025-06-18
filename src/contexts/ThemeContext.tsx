@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
-type Theme = 'dark' | 'light' | 'system';
+type Theme = 'dark' | 'light';
 
 interface ThemeContextType {
   theme: Theme;
@@ -19,7 +19,7 @@ interface ThemeProviderProps {
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   children,
-  defaultTheme = 'system',
+  defaultTheme = 'light',
   storageKey = 'virtue-ui-theme',
 }) => {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -29,41 +29,15 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
     return defaultTheme;
   });
 
-  const [actualTheme, setActualTheme] = useState<'dark' | 'light'>('light');
+  const [actualTheme, setActualTheme] = useState<'dark' | 'light'>(theme);
 
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
 
-    let resolvedTheme: 'dark' | 'light';
-
-    if (theme === 'system') {
-      resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-    } else {
-      resolvedTheme = theme;
-    }
-
-    root.classList.add(resolvedTheme);
-    setActualTheme(resolvedTheme);
-  }, [theme]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    const handleChange = () => {
-      if (theme === 'system') {
-        const resolvedTheme = mediaQuery.matches ? 'dark' : 'light';
-        setActualTheme(resolvedTheme);
-        const root = window.document.documentElement;
-        root.classList.remove('light', 'dark');
-        root.classList.add(resolvedTheme);
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    // Sadece manuel tema kullan, sistem temasını yok say
+    root.classList.add(theme);
+    setActualTheme(theme);
   }, [theme]);
 
   const value = {
