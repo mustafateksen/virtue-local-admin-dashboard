@@ -11,6 +11,7 @@ import LogsPage from './pages/LogsPage';
 import DevicesPage from './pages/DevicesPage';
 import AppsPage from './pages/AppsPage';
 import SettingsPage from './pages/SettingsPage';
+import LearnedProducts from './pages/LearnedProducts';
 
 function App() {
   return (
@@ -52,6 +53,11 @@ function App() {
               <Route path="/settings" element={
                 <PrivateRoute>
                   <SettingsPage />
+                </PrivateRoute>
+              } />
+              <Route path="/learned-products" element={
+                <PrivateRoute>
+                  <LearnedProducts />
                 </PrivateRoute>
               } />
               

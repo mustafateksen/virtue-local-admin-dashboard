@@ -93,7 +93,7 @@ export const DashboardPage: React.FC = () => {
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
           <div className="px-6 py-6 sm:p-8">
             <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
-              Connected Devices
+              Connected I/O Units
             </h3>
             <div className="space-y-4">
               {connectedDevices.map((device, index) => (

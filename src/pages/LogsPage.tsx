@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Star, Trash2, X, Search, Filter, Calendar } from 'lucide-react';
+import { Star, Trash2, X, Search, Filter, Calendar, Download, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import cam from "../assets/cam1.png";
 
 interface AnomalyLog {
@@ -50,6 +52,7 @@ export const LogsPage: React.FC = () => {
       sinceThen: "6 hours",
       date: "2024-06-09",
       uuid: "q7r8s9t0",
+
     },
   ]);
 
@@ -58,6 +61,7 @@ export const LogsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AnomalyLog | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
 
   const handleStarClick = (idx: number) => {
     setStarred(prev => {
@@ -82,6 +86,325 @@ export const LogsPage: React.FC = () => {
   const handleDelete = (idx: number) => {
     // Silme işlemi burada yapılacak
     console.log(`Deleting log ${idx}`);
+  };
+
+  // Export fonksiyonları
+  const generateChartDataURL = (chartData: number[], labels: string[], title: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d')!;
+      
+      // Chart arka planı
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Chart alanı
+      const chartWidth = 300;
+      const chartHeight = 120;
+      const chartX = 60;
+      const chartY = 40;
+      
+      // Başlık
+      ctx.fillStyle = '#1f2937';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(title, canvas.width / 2, 20);
+      
+      // Y ekseni (değerler)
+      const maxValue = Math.max(...chartData, 1);
+      const yScale = chartHeight / maxValue;
+      
+      // Grid çizgileri
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      
+      // Y ekseni grid çizgileri
+      for (let i = 0; i <= 4; i++) {
+        const y = chartY + (chartHeight / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(chartX, y);
+        ctx.lineTo(chartX + chartWidth, y);
+        ctx.stroke();
+        
+        // Y ekseni değerleri
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        const value = Math.round(maxValue - (maxValue / 4) * i);
+        ctx.fillText(value.toString(), chartX - 5, y + 3);
+      }
+      
+      // X ekseni grid çizgileri ve labellar
+      const barWidth = chartWidth / chartData.length;
+      for (let i = 0; i < chartData.length; i++) {
+        const x = chartX + (barWidth * i) + barWidth / 2;
+        
+        // Vertical grid line
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.beginPath();
+        ctx.moveTo(x, chartY);
+        ctx.lineTo(x, chartY + chartHeight);
+        ctx.stroke();
+        
+        // X ekseni labelları
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(labels[i], x, chartY + chartHeight + 15);
+      }
+      
+      // Bar chart çizimi
+      ctx.fillStyle = '#3b82f6';
+      for (let i = 0; i < chartData.length; i++) {
+        const barHeight = chartData[i] * yScale;
+        const x = chartX + (barWidth * i) + barWidth * 0.2;
+        const y = chartY + chartHeight - barHeight;
+        const width = barWidth * 0.6;
+        
+        ctx.fillRect(x, y, width, barHeight);
+        
+        // Değer gösterimi
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          chartData[i].toString(),
+          x + width / 2,
+          y - 5
+        );
+        ctx.fillStyle = '#3b82f6';
+      }
+      
+      // Chart çerçevesi
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(chartX, chartY, chartWidth, chartHeight);
+      ctx.stroke();
+      
+      resolve(canvas.toDataURL('image/png'));
+    });
+  };
+
+  const exportToPDF = async () => {
+    try {
+      // PDF oluştur
+      const doc = new jsPDF();
+      
+      // Başlık ekle
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Anomaly Logs Report', 14, 22);
+      
+      // Rapor tarihi ekle
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      const reportDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      doc.text(`Generated on: ${reportDate}`, 14, 32);
+      
+      // Özet bilgi ekle
+      doc.setTextColor(40, 40, 40);
+      doc.text(`Total Records: ${filteredLogs.length}`, 14, 42);
+      
+      // Tablo verisini hazırla
+      const tableData = filteredLogs.map((log, index) => [
+        log.anomalyNo.toString(),
+        log.streamerName,
+        log.sinceThen,
+        log.date,
+        log.uuid,
+        starred[index] ? 'Yes' : 'No'
+      ]);
+      
+      // Tablo başlıkları
+      const tableHeaders = [
+        'Anomaly No',
+        'Streamer Name', 
+        'Since Then',
+        'Date',
+        'UUID',
+        'Starred'
+      ];
+      
+      // AutoTable ile tablo oluştur
+      autoTable(doc, {
+        head: [tableHeaders],
+        body: tableData,
+        startY: 50,
+        theme: 'grid',
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue-500
+          textColor: 255,
+          fontStyle: 'bold',
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251], // Gray-50
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 25 }, // Anomaly No
+          1: { cellWidth: 35 }, // Streamer Name
+          2: { cellWidth: 25 }, // Since Then
+          3: { cellWidth: 30 }, // Date
+          4: { cellWidth: 40 }, // UUID
+          5: { halign: 'center', cellWidth: 20 }, // Starred
+        },
+        margin: { top: 50, left: 14, right: 14 },
+      });
+      
+      // Tablo sonrası Y pozisyonu al
+      const finalY = (doc as any).lastAutoTable.finalY || 120;
+      
+      // Charts section başlığı
+      doc.setFontSize(16);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Anomaly Statistics', 14, finalY + 20);
+      
+      // Örnek chart verileri (gerçek verilerin simülasyonu)
+      const chartData = {
+        lastDay: [12, 8, 15, 10, 7, 9, 14], // Son 7 günün saatlik verileri (örnek)
+        lastWeek: [45, 67, 32, 89, 56, 78, 23], // Son 7 günün günlük verileri
+        lastMonth: [156, 203, 178, 245, 189, 234, 167, 289, 178, 145, 234, 198, 
+                   234, 189, 167, 198, 145, 234, 189, 178, 203, 156, 289, 234, 
+                   167, 189, 234, 178, 203, 156], // Son 30 günün verileri
+        allTime: [1234, 1567, 1890, 2234, 2678, 3123, 2890, 3456, 3234, 2890, 3567, 3234] // Son 12 ayın verileri
+      };
+      
+      const chartLabels = {
+        lastDay: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+        lastWeek: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        lastMonth: Array.from({length: 30}, (_, i) => `${i + 1}`),
+        allTime: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      };
+      
+      let currentY = finalY + 35;
+      
+      // Son 24 saat grafiği
+      const dayChartURL = await generateChartDataURL(
+        chartData.lastDay, 
+        chartLabels.lastDay, 
+        'Anomalies - Last 24 Hours'
+      );
+      doc.addImage(dayChartURL, 'PNG', 14, currentY, 90, 45);
+      
+      // Son hafta grafiği
+      const weekChartURL = await generateChartDataURL(
+        chartData.lastWeek, 
+        chartLabels.lastWeek, 
+        'Anomalies - Last Week'
+      );
+      doc.addImage(weekChartURL, 'PNG', 110, currentY, 90, 45);
+      
+      currentY += 55;
+      
+      // Yeni sayfa gerekiyorsa ekle
+      if (currentY > 250) {
+        doc.addPage();
+        currentY = 20;
+      }
+      
+      // Son ay grafiği
+      const monthChartURL = await generateChartDataURL(
+        chartData.lastMonth.slice(0, 10), // İlk 10 günü göster (yer sıkıntısı için)
+        chartLabels.lastMonth.slice(0, 10), 
+        'Anomalies - Last 10 Days'
+      );
+      doc.addImage(monthChartURL, 'PNG', 14, currentY, 90, 45);
+      
+      // Tüm zamanlar grafiği
+      const allTimeChartURL = await generateChartDataURL(
+        chartData.allTime, 
+        chartLabels.allTime, 
+        'Anomalies - Last 12 Months'
+      );
+      doc.addImage(allTimeChartURL, 'PNG', 110, currentY, 90, 45);
+      
+      // Footer ekle
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          doc.internal.pageSize.width - 30,
+          doc.internal.pageSize.height - 10
+        );
+        doc.text(
+          'Virtue Admin Dashboard',
+          14,
+          doc.internal.pageSize.height - 10
+        );
+      }
+      
+      // PDF'i indir
+      const fileName = `anomaly-logs-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      
+      console.log('PDF exported successfully with charts:', fileName);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
+    
+    setExportDropdownOpen(false);
+  };
+
+  const exportToExcel = () => {
+    try {
+      // CSV formatında veri hazırla (Excel tarafından açılabilir)
+      const headers = ['Anomaly No', 'Streamer Name', 'Since Then', 'Date', 'UUID', 'Starred'];
+      const csvData = filteredLogs.map((log, index) => [
+        log.anomalyNo,
+        log.streamerName,
+        log.sinceThen,
+        log.date,
+        log.uuid,
+        starred[index] ? 'Yes' : 'No'
+      ]);
+      
+      // CSV içeriğini oluştur
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+      
+      // BOM (Byte Order Mark) ekle UTF-8 encoding için
+      const BOM = '\uFEFF';
+      const csvWithBOM = BOM + csvContent;
+      
+      // Blob oluştur ve indir
+      const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      const fileName = `anomaly-logs-${new Date().toISOString().split('T')[0]}.csv`;
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('Excel file exported successfully:', fileName);
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      alert('Failed to export Excel file. Please try again.');
+    }
+    
+    setExportDropdownOpen(false);
   };
 
   // Filtreleme
@@ -128,6 +451,57 @@ export const LogsPage: React.FC = () => {
               Date Range
             </button>
           </div>
+        </div>
+
+        {/* Export Dropdown */}
+        <div className="relative">
+          {/* Dropdown backdrop */}
+          {exportDropdownOpen && (
+            <div 
+              className="fixed inset-0 z-10" 
+              onClick={() => setExportDropdownOpen(false)}
+            />
+          )}
+          
+          <button 
+            onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            <Download className="h-4 w-4" />
+            Export
+            <ChevronDown className={`h-4 w-4 transition-transform ${exportDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {exportDropdownOpen && (
+            <div className={`absolute right-0 top-full mt-2 w-48 ${
+              theme === 'dark' ? 'bg-slate-800' : 'bg-white'
+            } border ${
+              theme === 'dark' ? 'border-slate-700' : 'border-gray-200'
+            } rounded-lg shadow-xl p-2 z-50`}>
+              <button
+                onClick={exportToPDF}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                  theme === 'dark' 
+                    ? 'text-white hover:bg-slate-700' 
+                    : 'text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <FileText className="h-4 w-4" />
+                Export as PDF
+              </button>
+              <button
+                onClick={exportToExcel}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                  theme === 'dark' 
+                    ? 'text-white hover:bg-slate-700' 
+                    : 'text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Export as Excel
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -12,7 +12,8 @@ import {
   X,
   Sun,
   Moon,
-  Package
+  Package,
+  SaveAll
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Logs', href: '/logs', icon: FileWarning, type: 'link' },
   { name: 'All Devices', href: '/devices', icon: Cpu, type: 'link' },
   { name: 'Apps', href: '/apps', icon: Package, type: 'link' },
+  { name: 'Learned Products', href: '/learned-products', icon: SaveAll, type: 'link' },
   { name: 'Settings', href: '/settings', icon: Settings, type: 'link' },
   { name: 'Theme Toggle', icon: 'theme', type: 'button', action: 'toggleTheme' },
   { name: 'Logout', icon: LogOut, type: 'button', action: 'logout' },
