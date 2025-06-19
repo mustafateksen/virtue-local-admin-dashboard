@@ -26,7 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       
       <div className={cn(
         "flex-1 flex flex-col min-h-screen",
-        isAuthenticated ? (isCollapsed ? "lg:ml-16" : "lg:ml-20") : ""
+        isAuthenticated ? (isCollapsed ? "lg:ml-20" : "lg:ml-72") : ""
       )}>
         {isAuthenticated && (
           <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

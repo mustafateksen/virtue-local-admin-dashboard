@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Star, Trash2, X, Search, Filter, Calendar } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 import cam from "../assets/cam1.png";
 
 interface AnomalyLog {
@@ -11,6 +12,8 @@ interface AnomalyLog {
 }
 
 export const LogsPage: React.FC = () => {
+  const { theme } = useTheme();
+  
   // Örnek veri
   const [logs] = useState<AnomalyLog[]>([
     {
@@ -91,10 +94,10 @@ export const LogsPage: React.FC = () => {
     <div className="space-y-6 lg:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-foreground">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
           Anomaly Logs
         </h1>
-        <p className="mt-3 lg:mt-4 text-base sm:text-lg lg:text-xl text-muted-foreground">
+        <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
           Anomalies that are captured can be viewed here
         </p>
       </div>
@@ -236,7 +239,9 @@ export const LogsPage: React.FC = () => {
       {/* Modal */}
       {modalOpen && selectedLog && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/20 backdrop-blur-sm p-4"
+          className={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm p-4 ${
+            theme === 'dark' ? 'bg-black/60' : 'bg-black/40'
+          }`}
           onClick={handleCloseModal}
         >
           <div

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CircleAlert, CircleCheck, Cctv, X, Play, Square } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,6 +15,7 @@ import cam1image from '../assets/cam1.png';
 ChartJS.register(LineElement, PointElement, LinearScale, Tooltip, CategoryScale);
 
 export const MonitorPage: React.FC = () => {
+  const { theme } = useTheme();
   const [learning, setLearning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,8 +48,8 @@ export const MonitorPage: React.FC = () => {
       status: 'anomaly',
       data: [2, 19, 10, 9, 3, 20, 16, 5, 18, 22],
       overlayColor: 'bg-red-600',
-      statusBg: 'bg-red-100 dark:bg-red-950',
-      statusText: 'text-red-600 dark:text-red-400',
+      statusBg: theme === 'dark' ? 'bg-red-950' : 'bg-red-100',
+      statusText: theme === 'dark' ? 'text-red-400' : 'text-red-600',
     },
     {
       id: 2,
@@ -55,8 +57,8 @@ export const MonitorPage: React.FC = () => {
       status: 'analyzing',
       data: [8, 15, 13, 20, 11, 18, 14, 19, 17, 21],
       overlayColor: 'bg-green-600',
-      statusBg: 'bg-green-100 dark:bg-green-950',
-      statusText: 'text-green-600 dark:text-green-400',
+      statusBg: theme === 'dark' ? 'bg-green-950' : 'bg-green-100',
+      statusText: theme === 'dark' ? 'text-green-400' : 'text-green-600',
     },
   ];
 
@@ -90,10 +92,10 @@ export const MonitorPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-foreground">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
             System Monitor
           </h1>
-          <p className="mt-3 lg:mt-4 text-base sm:text-lg lg:text-xl text-muted-foreground">
+          <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
             Real-time camera streams and anomaly detection
           </p>
         </div>
@@ -103,7 +105,7 @@ export const MonitorPage: React.FC = () => {
             className={`
               flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 min-w-[140px] h-10 border
               ${learning
-                ? 'bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900'
+                ? `${theme === 'dark' ? 'bg-red-950 text-red-400 border-red-800 hover:bg-red-900' : 'bg-red-100 text-red-600 border-red-200 hover:bg-red-50'}`
                 : 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
               }
             `}
@@ -129,7 +131,7 @@ export const MonitorPage: React.FC = () => {
           </button>
           
           <button
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900 transition-all duration-300 min-w-[140px] h-10"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 min-w-[140px] h-10 ${theme === 'dark' ? 'bg-red-950 text-red-400 border-red-800 hover:bg-red-900' : 'bg-red-100 text-red-600 border-red-200 hover:bg-red-50'}`}
             onClick={handleStopAllClick}
             disabled={loading}
           >

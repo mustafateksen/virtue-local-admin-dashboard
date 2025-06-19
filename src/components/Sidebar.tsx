@@ -93,13 +93,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed left-0 top-0 h-full bg-card border-r border-border transition-all duration-300 ease-in-out z-50",
-        // Mobile
-        "lg:relative lg:z-auto",
+        "fixed left-0 top-0 h-screen bg-card border-r border-border transition-all duration-300 ease-in-out z-40",
         // Mobile show/hide
         isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         // Desktop width
-        isCollapsed ? "lg:w-19" : "lg:w-72",
+        isCollapsed ? "lg:w-20" : "lg:w-72",
         // Mobile width
         "w-72"
       )}>
@@ -217,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     key={item.name}
                     onClick={handleClick}
                     className={cn(
-                      "group flex items-center w-full px-3 py-3 text-base font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
+                      "group flex items-center w-full px-3 py-3 text-sm lg:text-base font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
                       isCollapsed ? "justify-center" : ""
                     )}
                     title={isCollapsed ? getDisplayName() : undefined}

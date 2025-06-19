@@ -1,8 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export const DashboardPage: React.FC = () => {
+  const { theme } = useTheme();
   const navigate = useNavigate();
 
   const connectedDevices = [
@@ -14,8 +16,8 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-8 lg:space-y-10">
       <div>
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-foreground">Dashboard</h1>
-        <p className="mt-3 lg:mt-4 text-base sm:text-lg lg:text-xl text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Dashboard</h1>
+        <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
           Overview of your Main Terminal Cluster and System status
         </p>
       </div>
@@ -25,63 +27,63 @@ export const DashboardPage: React.FC = () => {
         {/* System Status */}
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
           <div className="px-6 py-6 sm:p-8">
-            <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
+            <h3 className="text-lg lg:text-xl leading-6 font-bold text-foreground mb-6">
               Main Terminal
             </h3>
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Cpu className="h-6 w-6 lg:h-7 lg:w-7 text-blue-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">CPU Usage</span>
+                  <span className="text-sm lg:text-base text-foreground">CPU Usage</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-base lg:text-lg font-medium text-foreground">45%</span>
+                  <span className="text-sm lg:text-base font-medium text-foreground">45%</span>
                   <p className="text-sm text-muted-foreground">2.1 GHz</p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Monitor className="h-6 w-6 lg:h-7 lg:w-7 text-green-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">Memory Usage</span>
+                  <span className="text-sm lg:text-base text-foreground">Memory Usage</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-base lg:text-lg font-medium text-foreground">2.8 GB</span>
+                  <span className="text-sm lg:text-base font-medium text-foreground">2.8 GB</span>
                   <p className="text-sm text-muted-foreground">70% of 4GB</p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <HardDrive className="h-6 w-6 lg:h-7 lg:w-7 text-yellow-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">Disk Space</span>
+                  <span className="text-sm lg:text-base text-foreground">Disk Space</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-base lg:text-lg font-medium text-foreground">45.2 GB</span>
+                  <span className="text-sm lg:text-base font-medium text-foreground">45.2 GB</span>
                   <p className="text-sm text-muted-foreground">60% of 75GB</p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Server className="h-6 w-6 lg:h-7 lg:w-7 text-purple-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">Network</span>
+                  <span className="text-sm lg:text-base text-foreground">Network</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-base lg:text-lg font-medium text-green-600">Connected</span>
+                  <span className="text-sm lg:text-base font-medium text-green-600">Connected</span>
                   <p className="text-sm text-muted-foreground">192.168.1.100</p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Activity className="h-6 w-6 lg:h-7 lg:w-7 text-green-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">System Health</span>
+                  <span className="text-sm lg:text-base text-foreground">System Health</span>
                 </div>
-                <span className="text-base lg:text-lg font-medium text-green-600">Healthy</span>
+                <span className="text-sm lg:text-base font-medium text-green-600">Healthy</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Server className="h-6 w-6 lg:h-7 lg:w-7 text-blue-500 mr-3 lg:mr-4" />
-                  <span className="text-base lg:text-lg text-foreground">Uptime</span>
+                  <span className="text-sm lg:text-base text-foreground">Uptime</span>
                 </div>
-                <span className="text-base lg:text-lg font-medium text-foreground">5d 12h 34m</span>
+                <span className="text-sm lg:text-base font-medium text-foreground">5d 12h 34m</span>
               </div>
             </div>
           </div>
@@ -97,14 +99,14 @@ export const DashboardPage: React.FC = () => {
               {connectedDevices.map((device, index) => (
                 <div key={index} className="flex items-center justify-between p-4 lg:p-5 bg-secondary/50 rounded-lg hover:bg-secondary/70 transition-colors">
                   <div className="min-w-0 flex-1">
-                    <p className="text-base lg:text-lg font-medium text-foreground truncate">{device.name}</p>
+                    <p className="text-sm lg:text-base font-medium text-foreground truncate">{device.name}</p>
                     <p className="text-sm lg:text-base text-muted-foreground">{device.ip}</p>
                   </div>
                   <div className="text-right ml-4">
                     <span className={`inline-flex px-3 py-1 lg:px-4 lg:py-2 text-sm lg:text-base font-semibold rounded-full ${
                       device.status === 'Online' 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400' 
-                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400'
+                        ? theme === 'dark' ? 'bg-green-900 text-green-400' : 'bg-green-100 text-green-800'
+                        : theme === 'dark' ? 'bg-red-900 text-red-400' : 'bg-red-100 text-red-800'
                     }`}>
                       {device.status}
                     </span>
@@ -137,28 +139,28 @@ export const DashboardPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
             <button 
               onClick={() => navigate('/monitor')}
-              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
               <Monitor className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>System Monitor</span>
             </button>
             <button 
               onClick={() => navigate('/logs')}
-              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
               <FileWarning className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>Logs</span>
             </button>
             <button 
               onClick={() => navigate('/devices')}
-              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
               <Cpu className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>All Devices</span>
             </button>
             <button 
               onClick={() => navigate('/apps')}
-              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-base lg:text-lg font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
               <Package className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>Apps</span>

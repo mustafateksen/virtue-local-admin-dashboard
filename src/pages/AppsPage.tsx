@@ -29,15 +29,16 @@ interface ComputeUnit {
 }
 
 const availableFeatures: CameraFeature[] = [
-  { id: 'anomaly_detection', name: 'Anomaly Detection', description: 'Detect anomalies in video feed', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400' },
-  { id: 'ocr', name: 'OCR', description: 'Optical Character Recognition', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400' },
-  { id: 'barcode_scanner', name: 'Barcode Scanner', description: 'Scan and decode barcodes', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400' },
-  { id: 'motion_detection', name: 'Motion Detection', description: 'Detect motion in video feed', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-400' },
-  { id: 'face_recognition', name: 'Face Recognition', description: 'Recognize and identify faces', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-400' },
-  { id: 'object_tracking', name: 'Object Tracking', description: 'Track objects in video feed', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-400' }
+  { id: 'anomaly_detection', name: 'Anomaly Detection', description: 'Detect anomalies in video feed', color: 'bg-red-100 text-red-800' },
+  { id: 'ocr', name: 'OCR', description: 'Optical Character Recognition', color: 'bg-blue-100 text-blue-800' },
+  { id: 'barcode_scanner', name: 'Barcode Scanner', description: 'Scan and decode barcodes', color: 'bg-green-100 text-green-800' },
+  { id: 'motion_detection', name: 'Motion Detection', description: 'Detect motion in video feed', color: 'bg-yellow-100 text-yellow-800' },
+  { id: 'face_recognition', name: 'Face Recognition', description: 'Recognize and identify faces', color: 'bg-purple-100 text-purple-800' },
+  { id: 'object_tracking', name: 'Object Tracking', description: 'Track objects in video feed', color: 'bg-indigo-100 text-indigo-800' }
 ];
 
 export const AppsPage: React.FC = () => {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -189,14 +190,29 @@ export const AppsPage: React.FC = () => {
     switch (status) {
       case 'active':
       case 'online':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-400';
+        return theme === 'dark' ? 'text-green-400' : 'text-green-800';
       case 'inactive':
       case 'offline':
-        return 'bg-muted text-muted-foreground';
+        return 'text-muted-foreground';
       case 'error':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-400';
+        return theme === 'dark' ? 'text-red-400' : 'text-red-800';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'text-muted-foreground';
+    }
+  };
+
+  const getStatusBg = (status: string) => {
+    switch (status) {
+      case 'active':
+      case 'online':
+        return theme === 'dark' ? 'bg-green-900/50' : 'bg-green-100';
+      case 'inactive':
+      case 'offline':
+        return 'bg-muted';
+      case 'error':
+        return theme === 'dark' ? 'bg-red-900/50' : 'bg-red-100';
+      default:
+        return 'bg-muted';
     }
   };
 
@@ -214,11 +230,11 @@ export const AppsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-foreground">
-            Camera Management
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
+            App Management
           </h1>
-          <p className="mt-3 lg:mt-4 text-base sm:text-lg lg:text-xl text-muted-foreground">
-            Manage camera features across compute units
+          <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
+            Assign different features to streamers across compute units
           </p>
         </div>
 
@@ -298,7 +314,7 @@ export const AppsPage: React.FC = () => {
                     <p className="text-sm text-muted-foreground">{unit.ip} • Uptime: {unit.uptime}</p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(unit.status)}`}>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBg(unit.status)} ${getStatusColor(unit.status)}`}>
                   {unit.status.charAt(0).toUpperCase() + unit.status.slice(1)}
                 </span>
               </div>
@@ -313,7 +329,7 @@ export const AppsPage: React.FC = () => {
                         <Camera className="h-5 w-5 text-muted-foreground" />
                         <span className="font-medium text-foreground">{camera.name}</span>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(camera.status)}`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
                         {camera.status}
                       </span>
                     </div>
