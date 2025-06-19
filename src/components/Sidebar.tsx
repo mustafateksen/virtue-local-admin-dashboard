@@ -32,7 +32,6 @@ const navigation = [
   { name: 'All Devices', href: '/devices', icon: Cpu, type: 'link' },
   { name: 'Apps', href: '/apps', icon: Package, type: 'link' },
   { name: 'Settings', href: '/settings', icon: Settings, type: 'link' },
-  { name: 'divider', type: 'divider' },
   { name: 'Theme Toggle', icon: 'theme', type: 'button', action: 'toggleTheme' },
   { name: 'Logout', icon: LogOut, type: 'button', action: 'logout' },
 ];
@@ -86,14 +85,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile backdrop */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/80 z-40 lg:hidden"
+          className={`fixed inset-0 z-40 lg:hidden ${
+            theme === 'dark' ? 'bg-black/80' : 'bg-black/50'
+          }`}
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed left-0 top-0 h-screen bg-card border-r border-border transition-all duration-300 ease-in-out z-40",
+        "fixed left-0 top-0 h-screen border-r transition-all duration-300 ease-in-out z-40",
+        // Theme-based background and border
+        theme === 'dark' 
+          ? 'bg-slate-900 border-slate-700' 
+          : 'bg-white border-gray-200',
         // Mobile show/hide
         isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         // Desktop width
@@ -102,7 +107,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         "w-72"
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-border">
+        <div className={`flex items-center justify-between h-16 px-4 border-b ${
+          theme === 'dark' ? 'border-slate-700' : 'border-gray-200'
+        }`}>
           {!isCollapsed && (
             <div className="flex items-center gap-3">
               <img 
@@ -113,7 +120,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   theme === 'dark' ? "brightness-0 invert" : ""
                 )}
               />
-              <h1 className="text-xl font-bold text-foreground truncate">
+              <h1 className={`text-xl font-bold truncate ${
+                theme === 'dark' ? 'text-white' : 'text-gray-900'
+              }`}>
                 Virtue Admin
               </h1>
             </div>
@@ -122,7 +131,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Mobile close button */}
           <button
             onClick={() => setIsMobileOpen(false)}
-            className="lg:hidden text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
+            className={`lg:hidden p-2 rounded-md transition-colors ${
+              theme === 'dark' 
+                ? 'text-gray-400 hover:text-white hover:bg-slate-800' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
           >
             <X className="h-5 w-5 cursor-pointer" />
           </button>
@@ -130,7 +143,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Desktop collapse button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
+            className={`hidden lg:flex p-2 rounded-md transition-colors ${
+              theme === 'dark' 
+                ? 'text-gray-400 hover:text-white hover:bg-slate-800' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
           >
             {isCollapsed ? (
               <ChevronRight className="h-6 w-6 cursor-pointer" />
@@ -143,12 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex flex-col h-full">
           {/* Navigation - positioned at top */}
           <nav className="px-3 py-4 space-y-1">
-            {navigation.map((item, index) => {
-              // Divider
-              if (item.type === 'divider') {
-                return <div key={index} className="my-2 border-t border-border"></div>;
-              }
-
+            {navigation.map((item) => {
               // Link items
               if (item.type === 'link') {
                 const isActive = location.pathname === item.href;
@@ -159,8 +171,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={cn(
                       "group flex items-center px-3 py-3 text-base font-medium rounded-lg transition-colors relative",
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        ? theme === 'dark' 
+                          ? "bg-blue-600 text-white shadow-sm" 
+                          : "bg-blue-500 text-white shadow-sm"
+                        : theme === 'dark'
+                          ? "text-gray-400 hover:bg-slate-800 hover:text-white"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     )}
                     onClick={() => setIsMobileOpen(false)}
                     title={isCollapsed ? item.name : undefined}
@@ -169,7 +185,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       className: cn(
                         "flex-shrink-0 h-6 w-6",
                         isCollapsed ? "mr-0" : "mr-3",
-                        isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-accent-foreground"
+                        isActive 
+                          ? "text-white" 
+                          : theme === 'dark'
+                            ? "text-gray-400 group-hover:text-white"
+                            : "text-gray-600 group-hover:text-gray-900"
                       )
                     })}
                     {!isCollapsed && (
@@ -178,7 +198,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     
                     {/* Tooltip for collapsed state */}
                     {isCollapsed && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                      <div className={`absolute left-full ml-2 px-2 py-1 text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 ${
+                        theme === 'dark' 
+                          ? 'bg-slate-800 text-white' 
+                          : 'bg-white text-gray-900 border border-gray-200'
+                      }`}>
                         {item.name}
                       </div>
                     )}
@@ -186,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               }
 
-              // Button items
+              // Button items - same styling as links
               if (item.type === 'button') {
                 const handleClick = () => {
                   if (item.action === 'toggleTheme') {
@@ -215,21 +239,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     key={item.name}
                     onClick={handleClick}
                     className={cn(
-                      "group flex items-center w-full px-3 py-3 text-sm lg:text-base font-medium text-muted-foreground rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors relative",
-                      isCollapsed ? "justify-center" : ""
+                      "group flex items-center w-full px-3 py-3 text-base font-medium rounded-lg transition-colors relative",
+                      theme === 'dark'
+                        ? "text-gray-400 hover:bg-slate-800 hover:text-white"
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     )}
                     title={isCollapsed ? getDisplayName() : undefined}
                   >
                     {React.createElement(getIcon(), {
                       className: cn(
                         "flex-shrink-0 h-6 w-6",
-                        isCollapsed ? "mr-0" : "mr-3"
+                        isCollapsed ? "mr-0" : "mr-3",
+                        theme === 'dark'
+                          ? "text-gray-400 group-hover:text-white"
+                          : "text-gray-600 group-hover:text-gray-900"
                       )
                     })}
                     {!isCollapsed && <span className="truncate">{getDisplayName()}</span>}
                     
                     {isCollapsed && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                      <div className={`absolute left-full ml-2 px-2 py-1 text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 ${
+                        theme === 'dark' 
+                          ? 'bg-slate-800 text-white' 
+                          : 'bg-white text-gray-900 border border-gray-200'
+                      }`}>
                         {getDisplayName()}
                       </div>
                     )}
