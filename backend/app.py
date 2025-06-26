@@ -189,26 +189,63 @@ def format_uptime(seconds):
     minutes = int((seconds % 3600) // 60)
     return f"{days}d {hours}h {minutes}m"
 
-def ping_device(ip_address: str) -> bool:
-    """Ping a device to check if it's online via main AI system"""
+def ping_device_detailed(ip_address: str, via_ai_system: str = None) -> dict:
+    """Ping a device directly to check if it responds with 'pong' from its own AI system"""
+    result = {
+        'reachable': False,
+        'response': 'No response',
+        'method': 'unknown'
+    }
+    
     try:
-        # First try the main AI system's ping endpoint (port 8000)
-        main_ai_url = f"http://192.168.1.225:8000/ping?ip={ip_address}"
-        response = requests.get(main_ai_url, timeout=5)
+        # Ping the device directly at its own AI system endpoint
+        if ':' in ip_address:
+            # IP already includes port
+            ping_url = f"http://{ip_address}/ping"
+        else:
+            # Add default AI system port
+            ping_url = f"http://{ip_address}:8000/ping"
+        
+        logger.info(f"Pinging device directly at: {ping_url}")
+        response = requests.get(ping_url, timeout=5)
+        
         if response.status_code == 200:
             data = response.json()
-            return data.get('status') == 'reachable'
+            result['method'] = 'direct_ai_ping'
+            result['response'] = data.get('msg', data.get('status', 'Unknown'))
+            # Only accept explicit "pong" response
+            result['reachable'] = data.get('msg') == 'pong'
+            logger.info(f"Device {ip_address} responded with: {result['response']}")
+            return result
+        else:
+            result['method'] = 'direct_ai_ping'
+            result['response'] = f"Device not found (HTTP {response.status_code})"
+            result['reachable'] = False
+            return result
+            
+    except requests.exceptions.ConnectionError:
+        logger.warning(f"Connection refused to device {ip_address}")
+        result['response'] = "Device not found - connection refused"
+        result['method'] = 'connection_refused'
+        result['reachable'] = False
+        return result
+    except requests.exceptions.Timeout:
+        logger.warning(f"Timeout connecting to device {ip_address}")
+        result['response'] = "Device not found - connection timeout"
+        result['method'] = 'connection_timeout'
+        result['reachable'] = False
+        return result
     except Exception as e:
-        logger.warning(f"Failed to ping via main AI system: {e}")
-    
-    # Fallback to direct ping
-    try:
-        import subprocess
-        result = subprocess.run(['ping', '-c', '1', '-W', '2', ip_address], 
-                              capture_output=True, text=True)
-        return result.returncode == 0
-    except:
-        return False
+        logger.warning(f"Failed to ping device {ip_address}: {e}")
+        result['response'] = "Device not found - unable to connect"
+        result['method'] = 'connection_failed'
+        result['reachable'] = False
+        return result
+
+def ping_device(ip_address: str, via_ai_system: str = None) -> bool:
+    """Ping a device to check if it's online via AI system or direct ping"""
+    result = ping_device_detailed(ip_address, via_ai_system)
+    return result['reachable']
 
 def get_device_stats(ip_address: str) -> Optional[Dict]:
     """Get system stats from a remote Raspberry Pi device"""
@@ -490,30 +527,20 @@ class RefreshDevicesResource(Resource):
 # Ping Resource for REST API compatibility
 class PingResource(Resource):
     def get(self):
-        """Handle ping requests through REST API - proxy to main AI system"""
+        """Handle ping requests through REST API - proxy to AI system"""
         try:
             ip = request.args.get('ip')
+            via_ai_system = request.args.get('via_ai_system')  # Optional AI system IP
+            
             if ip:
-                # Forward to main AI system
-                main_ai_url = f"http://192.168.1.225:8000/ping?ip={ip}"
-                try:
-                    response = requests.get(main_ai_url, timeout=5)
-                    if response.status_code == 200:
-                        ai_data = response.json()
-                        # Convert AI system response to standard format
-                        if ai_data.get('msg') == 'pong':
-                            return {'status': 'reachable', 'ip': ip}, 200
-                        else:
-                            return {'status': 'unreachable', 'ip': ip}, 200
-                    else:
-                        # Fallback to local ping
-                        is_reachable = ping_device(ip)
-                        return {'status': 'reachable' if is_reachable else 'unreachable', 'ip': ip}, 200
-                except Exception as e:
-                    logger.warning(f"Main AI system ping failed: {e}")
-                    # Fallback to local ping
-                    is_reachable = ping_device(ip)
-                    return {'status': 'reachable' if is_reachable else 'unreachable', 'ip': ip}, 200
+                # Use the detailed ping function to get full response
+                ping_result = ping_device_detailed(ip, via_ai_system)
+                return {
+                    'status': 'reachable' if ping_result['reachable'] else 'unreachable',
+                    'ip': ip,
+                    'msg': ping_result['response'],
+                    'method': ping_result['method']
+                }, 200
             else:
                 # Just return API status
                 return {'status': 'online', 'message': 'Flask API is reachable'}, 200
@@ -620,22 +647,37 @@ class StreamersResource(Resource):
 # Cameras Resource - proxy to main AI system
 class CamerasResource(Resource):
     def get(self):
-        """Get cameras from main AI system via proxy"""
+        """Get cameras from specific IO Unit via proxy"""
         try:
-            # Try to fetch from main AI system
-            main_ai_url = "http://192.168.1.225:8000/get_streamers"
-            try:
-                response = requests.get(main_ai_url, timeout=10)
-                if response.status_code == 200:
-                    ai_data = response.json()
-                    # Return the data as-is from AI system
-                    return ai_data, 200
+            # Get IO Unit IP from query parameter
+            io_unit_ip = request.args.get('io_unit_ip')
+            
+            if io_unit_ip:
+                # Fetch from specific IO Unit's AI system
+                # Check if port is already included in the IP
+                if ':' in io_unit_ip:
+                    main_ai_url = f"http://{io_unit_ip}/get_streamers"
                 else:
-                    logger.warning(f"Main AI system returned status {response.status_code}")
+                    main_ai_url = f"http://{io_unit_ip}:8000/get_streamers"
+                try:
+                    response = requests.get(main_ai_url, timeout=10)
+                    if response.status_code == 200:
+                        ai_data = response.json()
+                        # Add IO Unit IP to each camera for identification
+                        if ai_data.get('payload'):
+                            for camera in ai_data['payload']:
+                                camera['io_unit_ip'] = io_unit_ip
+                        return ai_data, 200
+                    else:
+                        logger.warning(f"AI system at {io_unit_ip} returned status {response.status_code}")
+                        return {'payload': []}, 200
+                except requests.exceptions.RequestException as e:
+                    logger.warning(f"Cannot connect to AI system at {io_unit_ip}: {e}")
                     return {'payload': []}, 200
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Cannot connect to main AI system: {e}")
-                # Return empty payload if AI system is down
+            else:
+                # No IO Unit IP provided - return empty payload
+                # This prevents loading cameras when no IO Units exist
+                logger.info("No IO Unit IP provided, returning empty camera list")
                 return {'payload': []}, 200
         except Exception as e:
             logger.error(f"Error in cameras resource: {e}")
@@ -643,6 +685,74 @@ class CamerasResource(Resource):
     
     def options(self):
         """Handle CORS preflight for cameras endpoint"""
+        return {}, 200
+
+# Streamer Status Resource - check live camera statuses
+class StreamerStatusResource(Resource):
+    def get(self):
+        """Get live camera statuses from specific IO Unit via /get-streamers"""
+        try:
+            # Get IO Unit IP from query parameter
+            io_unit_ip = request.args.get('io_unit_ip')
+            
+            if not io_unit_ip:
+                return {'message': 'IO Unit IP is required'}, 400
+                
+            # Fetch from specific IO Unit's AI system
+            # Check if port is already included in the IP
+            if ':' in io_unit_ip:
+                ai_url = f"http://{io_unit_ip}/get_streamers"
+            else:
+                ai_url = f"http://{io_unit_ip}:8000/get_streamers"
+                
+            try:
+                response = requests.get(ai_url, timeout=10)
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    # Extract only the status information we need
+                    camera_statuses = []
+                    if ai_data.get('payload'):
+                        for camera in ai_data['payload']:
+                            if camera.get('streamer_type') == 'camera':
+                                camera_statuses.append({
+                                    'streamer_uuid': camera.get('streamer_uuid'),
+                                    'streamer_hr_name': camera.get('streamer_hr_name'),
+                                    'is_alive': camera.get('is_alive', 'false'),
+                                    'io_unit_ip': io_unit_ip
+                                })
+                    return {
+                        'success': True,
+                        'io_unit_ip': io_unit_ip,
+                        'cameras': camera_statuses
+                    }, 200
+                else:
+                    logger.warning(f"AI system at {io_unit_ip} returned status {response.status_code}")
+                    return {
+                        'success': False,
+                        'message': f'AI system responded with status {response.status_code}',
+                        'io_unit_ip': io_unit_ip,
+                        'cameras': []
+                    }, 200
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to AI system at {io_unit_ip}: {e}")
+                return {
+                    'success': False,
+                    'message': f'Cannot connect to AI system: {str(e)}',
+                    'io_unit_ip': io_unit_ip,
+                    'cameras': []
+                }, 200
+                
+        except Exception as e:
+            logger.error(f"Error in streamer status resource: {e}")
+            return {
+                'success': False,
+                'message': f'Internal error: {str(e)}',
+                'cameras': []
+            }, 500
+    
+    def options(self):
+        """Handle CORS preflight for streamer status endpoint"""
         return {}, 200
 
 # Register API endpoints
@@ -658,6 +768,7 @@ api.add_resource(PingResource, '/api/ping')
 api.add_resource(StreamersResource, '/get_streamers')
 api.add_resource(StreamersResource, '/add_streamer', endpoint='add_streamer')
 api.add_resource(CamerasResource, '/get_cameras')
+api.add_resource(StreamerStatusResource, '/get_streamer_statuses')
 
 # Error handlers
 @app.errorhandler(404)

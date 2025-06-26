@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
@@ -12,6 +12,19 @@ import DevicesPage from './pages/DevicesPage';
 import AppsPage from './pages/AppsPage';
 import SettingsPage from './pages/SettingsPage';
 import LearnedProducts from './pages/LearnedProducts';
+
+// Smart default route component
+const DefaultRoute = () => {
+  const { isAuthenticated, isRegistered } = useAuth();
+  
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  } else if (isRegistered) {
+    return <Navigate to="/login" replace />;
+  } else {
+    return <Navigate to="/register" replace />;
+  }
+};
 
 function App() {
   return (
@@ -61,8 +74,8 @@ function App() {
                 </PrivateRoute>
               } />
               
-              {/* Default redirect */}
-              <Route path="/" element={<Navigate to="/register" replace />} />
+              {/* Smart default redirect */}
+              <Route path="/" element={<DefaultRoute />} />
             </Routes>
           </Layout>
         </Router>

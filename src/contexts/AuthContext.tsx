@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isRegistered: boolean;
+  isLoading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   register: (userData: { name: string; username: string; password: string }) => Promise<boolean>;
   logout: () => void;
@@ -21,6 +22,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const isAuthenticated = !!user;
 
@@ -33,8 +35,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Check if user is already logged in (from localStorage)
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (error) {
+        console.error('Failed to parse saved user:', error);
+        localStorage.removeItem('user');
+      }
     }
+    
+    // Set loading to false after checking localStorage
+    setIsLoading(false);
   }, []);
 
   const checkRegistrationStatus = async (): Promise<boolean> => {
@@ -77,6 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user,
         isAuthenticated,
         isRegistered,
+        isLoading,
         login,
         register,
         logout,
