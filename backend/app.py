@@ -98,6 +98,32 @@ class RaspberryDevice(db.Model):
             'createdAt': self.created_at.isoformat() if self.created_at else None
         }
 
+class Streamer(db.Model):
+    __tablename__ = 'streamers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    streamer_uuid = db.Column(db.String(100), unique=True, nullable=False)
+    streamer_type = db.Column(db.String(50), nullable=False)  # camera, io, etc.
+    streamer_hr_name = db.Column(db.String(100), nullable=False)
+    config_template_name = db.Column(db.String(100), nullable=False)
+    is_alive = db.Column(db.String(10), default='false')
+    ip_address = db.Column(db.String(50), nullable=True)  # Store actual IP address
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'streamer_uuid': self.streamer_uuid,
+            'streamer_type': self.streamer_type,
+            'streamer_hr_name': self.streamer_hr_name,
+            'config_template_name': self.config_template_name,
+            'is_alive': self.is_alive,
+            'ip_address': self.ip_address,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 # Utility Functions
 def get_system_stats():
     """Get current system statistics"""
@@ -164,7 +190,18 @@ def format_uptime(seconds):
     return f"{days}d {hours}h {minutes}m"
 
 def ping_device(ip_address: str) -> bool:
-    """Ping a device to check if it's online"""
+    """Ping a device to check if it's online via main AI system"""
+    try:
+        # First try the main AI system's ping endpoint (port 8000)
+        main_ai_url = f"http://192.168.1.225:8000/ping?ip={ip_address}"
+        response = requests.get(main_ai_url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('status') == 'reachable'
+    except Exception as e:
+        logger.warning(f"Failed to ping via main AI system: {e}")
+    
+    # Fallback to direct ping
     try:
         import subprocess
         result = subprocess.run(['ping', '-c', '1', '-W', '2', ip_address], 
@@ -450,6 +487,164 @@ class RefreshDevicesResource(Resource):
             db.session.rollback()
             return {'message': 'Failed to refresh devices'}, 500
 
+# Ping Resource for REST API compatibility
+class PingResource(Resource):
+    def get(self):
+        """Handle ping requests through REST API - proxy to main AI system"""
+        try:
+            ip = request.args.get('ip')
+            if ip:
+                # Forward to main AI system
+                main_ai_url = f"http://192.168.1.225:8000/ping?ip={ip}"
+                try:
+                    response = requests.get(main_ai_url, timeout=5)
+                    if response.status_code == 200:
+                        ai_data = response.json()
+                        # Convert AI system response to standard format
+                        if ai_data.get('msg') == 'pong':
+                            return {'status': 'reachable', 'ip': ip}, 200
+                        else:
+                            return {'status': 'unreachable', 'ip': ip}, 200
+                    else:
+                        # Fallback to local ping
+                        is_reachable = ping_device(ip)
+                        return {'status': 'reachable' if is_reachable else 'unreachable', 'ip': ip}, 200
+                except Exception as e:
+                    logger.warning(f"Main AI system ping failed: {e}")
+                    # Fallback to local ping
+                    is_reachable = ping_device(ip)
+                    return {'status': 'reachable' if is_reachable else 'unreachable', 'ip': ip}, 200
+            else:
+                # Just return API status
+                return {'status': 'online', 'message': 'Flask API is reachable'}, 200
+        except Exception as e:
+            logger.error(f"Error in ping resource: {e}")
+            return {'status': 'error', 'message': str(e)}, 500
+    
+    def options(self):
+        """Handle CORS preflight for ping endpoint"""
+        return {}, 200
+
+# Streamers Resource for device management
+class StreamersResource(Resource):
+    def get(self):
+        """Get all streamers/devices"""
+        try:
+            streamers = Streamer.query.all()
+            result = []
+            for streamer in streamers:
+                result.append({
+                    'id': streamer.id,
+                    'streamer_uuid': streamer.streamer_uuid,
+                    'streamer_type': streamer.streamer_type,
+                    'streamer_hr_name': streamer.streamer_hr_name,
+                    'config_template_name': streamer.config_template_name,
+                    'is_alive': streamer.is_alive,
+                    'ip_address': streamer.ip_address,
+                    'created_at': streamer.created_at.isoformat() if streamer.created_at else None,
+                    'updated_at': streamer.updated_at.isoformat() if streamer.updated_at else None
+                })
+            return result, 200
+        except Exception as e:
+            logger.error(f"Error getting streamers: {e}")
+            return {'message': 'Failed to get streamers'}, 500
+    
+    def post(self):
+        """Add a new streamer/device"""
+        try:
+            data = request.get_json()
+            
+            # Validate required fields
+            required_fields = ['streamer_uuid', 'streamer_type', 'streamer_hr_name', 'config_template_name', 'is_alive']
+            if not all(field in data for field in required_fields):
+                return {'message': 'Missing required fields'}, 400
+            
+            # Create new streamer
+            streamer = Streamer(
+                streamer_uuid=data['streamer_uuid'],
+                streamer_type=data['streamer_type'],
+                streamer_hr_name=data['streamer_hr_name'],
+                config_template_name=data['config_template_name'],
+                is_alive=data['is_alive'],
+                ip_address=data.get('ip_address')  # Store IP address if provided
+            )
+            
+            db.session.add(streamer)
+            db.session.commit()
+            
+            return {
+                'message': 'Streamer added successfully',
+                'id': streamer.id
+            }, 201
+            
+        except Exception as e:
+            logger.error(f"Error adding streamer: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to add streamer'}, 500
+    
+    def put(self):
+        """Update streamer status (for ping updates)"""
+        try:
+            data = request.get_json()
+            streamer_id = data.get('id')
+            
+            if not streamer_id:
+                return {'message': 'Streamer ID is required'}, 400
+            
+            streamer = Streamer.query.get(streamer_id)
+            if not streamer:
+                return {'message': 'Streamer not found'}, 404
+            
+            # Update status based on ping result
+            if 'is_alive' in data:
+                streamer.is_alive = data['is_alive']
+                streamer.updated_at = datetime.datetime.utcnow()
+                
+            db.session.commit()
+            
+            return {
+                'message': 'Streamer status updated successfully',
+                'id': streamer.id,
+                'is_alive': streamer.is_alive
+            }, 200
+            
+        except Exception as e:
+            logger.error(f"Error updating streamer status: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to update streamer status'}, 500
+    
+    def options(self):
+        """Handle CORS preflight for streamers endpoint"""
+        return {}, 200
+
+# Cameras Resource - proxy to main AI system
+class CamerasResource(Resource):
+    def get(self):
+        """Get cameras from main AI system via proxy"""
+        try:
+            # Try to fetch from main AI system
+            main_ai_url = "http://192.168.1.225:8000/get_streamers"
+            try:
+                response = requests.get(main_ai_url, timeout=10)
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    # Return the data as-is from AI system
+                    return ai_data, 200
+                else:
+                    logger.warning(f"Main AI system returned status {response.status_code}")
+                    return {'payload': []}, 200
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to main AI system: {e}")
+                # Return empty payload if AI system is down
+                return {'payload': []}, 200
+        except Exception as e:
+            logger.error(f"Error in cameras resource: {e}")
+            return {'payload': []}, 200
+    
+    def options(self):
+        """Handle CORS preflight for cameras endpoint"""
+        return {}, 200
+
 # Register API endpoints
 api.add_resource(AuthCheckResource, '/api/auth/check-registration')
 api.add_resource(RegisterResource, '/api/auth/register')
@@ -458,6 +653,11 @@ api.add_resource(SystemStatsResource, '/api/system/stats')
 api.add_resource(RaspberryDevicesResource, '/api/devices')
 api.add_resource(RaspberryDeviceResource, '/api/devices/<int:device_id>')
 api.add_resource(RefreshDevicesResource, '/api/devices/refresh')
+# New Streamer API endpoints
+api.add_resource(PingResource, '/api/ping')
+api.add_resource(StreamersResource, '/get_streamers')
+api.add_resource(StreamersResource, '/add_streamer', endpoint='add_streamer')
+api.add_resource(CamerasResource, '/get_cameras')
 
 # Error handlers
 @app.errorhandler(404)
@@ -538,4 +738,4 @@ if __name__ == '__main__':
     monitor_thread.start()
     
     # Run the app
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(debug=True, host='0.0.0.0', port=8001)
