@@ -1,17 +1,87 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
+// Interface for I/O Units (matching DevicesPage)
+interface IOUnit {
+  id: string;
+  name: string;
+  ipAddress: string;
+  status: 'online' | 'offline';
+  inputs: number;
+  outputs: number;
+  lastActivity: string;
+}
+
+// LocalStorage key (same as in DevicesPage)
+const IO_UNITS_STORAGE_KEY = 'virtue-devices-io-units';
+
+// Helper function to load I/O units from localStorage
+const loadIOUnitsFromStorage = (): IOUnit[] => {
+  try {
+    const stored = localStorage.getItem(IO_UNITS_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Failed to load I/O units from storage:', error);
+    return [];
+  }
+};
+
 export const DashboardPage: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const [ioUnits, setIOUnits] = useState<IOUnit[]>([]);
 
-  const connectedDevices = [
-    { name: 'Compute Module #001', ip: '192.168.1.101', status: 'Online', uptime: '2d 5h' },
-    { name: 'Compute Module #002', ip: '192.168.1.102', status: 'Online', uptime: '1d 12h' },
-    { name: 'Compute Module #003', ip: '192.168.1.103', status: 'Offline', uptime: '-' },
-  ];
+  // Load I/O units from localStorage on component mount
+  useEffect(() => {
+    const loadedUnits = loadIOUnitsFromStorage();
+    setIOUnits(loadedUnits);
+
+    // Listen for storage changes to update when devices are added/removed
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === IO_UNITS_STORAGE_KEY) {
+        const updatedUnits = loadIOUnitsFromStorage();
+        setIOUnits(updatedUnits);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also listen for custom events within the same window (for DevicesPage changes)
+    const handleDevicesUpdate = () => {
+      const updatedUnits = loadIOUnitsFromStorage();
+      setIOUnits(updatedUnits);
+    };
+
+    window.addEventListener('ioUnitsUpdated', handleDevicesUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('ioUnitsUpdated', handleDevicesUpdate);
+    };
+  }, []);
+
+  // Calculate uptime display
+  const getUptimeDisplay = (lastActivity: string, status: string) => {
+    if (status === 'offline') return '-';
+    
+    try {
+      const lastTime = new Date(lastActivity);
+      const now = new Date();
+      const diffMs = now.getTime() - lastTime.getTime();
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      
+      if (diffDays > 0) {
+        return `${diffDays}d ${diffHours % 24}h`;
+      } else {
+        return `${diffHours}h`;
+      }
+    } catch {
+      return 'Unknown';
+    }
+  };
 
   return (
     <div className="space-y-8 lg:space-y-10">
@@ -91,32 +161,48 @@ export const DashboardPage: React.FC = () => {
 
         {/* Connected Devices */}
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
-          <div className="px-6 py-6 sm:p-8">
+          <div className="px-6 py-6 sm:p-8 h-full flex flex-col">
             <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
               Connected I/O Units
             </h3>
-            <div className="space-y-4">
-              {connectedDevices.map((device, index) => (
-                <div key={index} className="flex items-center justify-between p-4 lg:p-5 bg-secondary/50 rounded-lg hover:bg-secondary/70 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm lg:text-base font-medium text-foreground truncate">{device.name}</p>
-                    <p className="text-sm lg:text-base text-muted-foreground">{device.ip}</p>
-                  </div>
-                  <div className="text-right ml-4">
-                    <span className={`inline-flex px-3 py-1 lg:px-4 lg:py-2 text-sm lg:text-base font-semibold rounded-full ${
-                      device.status === 'Online' 
-                        ? theme === 'dark' ? 'bg-green-900 text-green-400' : 'bg-green-100 text-green-800'
-                        : theme === 'dark' ? 'bg-red-900 text-red-400' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {device.status}
-                    </span>
-                    <p className="text-sm lg:text-base text-muted-foreground mt-1">{device.uptime}</p>
+            <div className="space-y-4 flex-1">
+              {ioUnits.length === 0 ? (
+                <div className="flex items-center justify-center p-6 text-center h-full min-h-[200px]">
+                  <div>
+                    <Cpu className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm lg:text-base text-muted-foreground">
+                      No I/O Units connected
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Add devices in the Devices page to see them here
+                    </p>
                   </div>
                 </div>
-              ))}
+              ) : (
+                ioUnits.map((unit, index) => (
+                  <div key={unit.id || index} className="flex items-center justify-between p-4 lg:p-5 bg-secondary/50 rounded-lg hover:bg-secondary/70 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm lg:text-base font-medium text-foreground truncate">{unit.name}</p>
+                      <p className="text-sm lg:text-base text-muted-foreground">{unit.ipAddress}</p>
+                    </div>
+                    <div className="text-right ml-4">
+                      <span className={`inline-flex px-3 py-1 lg:px-4 lg:py-2 text-sm lg:text-base font-semibold rounded-full ${
+                        unit.status === 'online' 
+                          ? theme === 'dark' ? 'bg-green-900 text-green-400' : 'bg-green-100 text-green-800'
+                          : theme === 'dark' ? 'bg-red-900 text-red-400' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {unit.status === 'online' ? 'Online' : 'Offline'}
+                      </span>
+                      <p className="text-sm lg:text-base text-muted-foreground mt-1">
+                        {getUptimeDisplay(unit.lastActivity, unit.status)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
             
-            {/* See All Button */}
+            {/* See All Button - Always at bottom right */}
             <div className="flex justify-end mt-6">
               <button
                 onClick={() => navigate('/devices')}

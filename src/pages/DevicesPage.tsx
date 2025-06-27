@@ -112,6 +112,8 @@ const loadIOUnitsFromStorage = (): IOUnit[] => {
 const saveIOUnitsToStorage = (ioUnits: IOUnit[]) => {
   try {
     localStorage.setItem(IO_UNITS_STORAGE_KEY, JSON.stringify(ioUnits));
+    // Dispatch custom event to notify other components (like DashboardPage)
+    window.dispatchEvent(new CustomEvent('ioUnitsUpdated'));
   } catch (error) {
     console.error('Failed to save I/O units to storage:', error);
   }
