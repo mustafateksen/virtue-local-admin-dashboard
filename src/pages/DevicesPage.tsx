@@ -94,17 +94,17 @@ const getCameraStatusesFromIOUnit = async (ioUnitIP: string): Promise<any> => {
   }
 };
 
-// LocalStorage keys - For both I/O units and cameras
+// LocalStorage keys - For both Compute Units and cameras
 const IO_UNITS_STORAGE_KEY = 'virtue-devices-io-units';
 const CAMERAS_STORAGE_KEY = 'virtue-devices-cameras';
 
-// Helper functions for localStorage (I/O units)
+// Helper functions for localStorage (Compute Units)
 const loadIOUnitsFromStorage = (): IOUnit[] => {
   try {
     const stored = localStorage.getItem(IO_UNITS_STORAGE_KEY);
     return stored ? JSON.parse(stored) : [];
   } catch (error) {
-    console.error('Failed to load I/O units from storage:', error);
+    console.error('Failed to load Compute Units from storage:', error);
     return [];
   }
 };
@@ -115,7 +115,7 @@ const saveIOUnitsToStorage = (ioUnits: IOUnit[]) => {
     // Dispatch custom event to notify other components (like DashboardPage)
     window.dispatchEvent(new CustomEvent('ioUnitsUpdated'));
   } catch (error) {
-    console.error('Failed to save I/O units to storage:', error);
+    console.error('Failed to save Compute Units to storage:', error);
   }
 };
 
@@ -154,7 +154,7 @@ const convertAICameraToCamera = (aiCamera: any): Camera => {
 export const DevicesPage: React.FC = () => {
   const { theme } = useTheme();
   
-  // Cameras come from AI system AND localStorage, I/O Units from localStorage
+  // Cameras come from AI system AND localStorage, Compute Units from localStorage
   const [cameras, setCameras] = useState<Camera[]>(() => loadCamerasFromStorage());
   const [ioUnits, setIOUnits] = useState<IOUnit[]>(() => loadIOUnitsFromStorage());
 
@@ -173,7 +173,7 @@ export const DevicesPage: React.FC = () => {
     }
   }, []); // Empty dependency array - only run on mount
 
-  // Save I/O units to localStorage whenever they change
+  // Save Compute Units to localStorage whenever they change
   useEffect(() => {
     saveIOUnitsToStorage(ioUnits);
   }, [ioUnits]);
@@ -262,7 +262,7 @@ export const DevicesPage: React.FC = () => {
     console.log('Checking device statuses...');
     
     try {
-      // First check I/O units via ping
+      // First check Compute Units via ping
       const updatedIOUnits = await Promise.all(
         ioUnits.map(async (ioUnit) => {
           const pingResult = await pingDevice(ioUnit.ipAddress);
@@ -398,7 +398,7 @@ export const DevicesPage: React.FC = () => {
   // Removed all useEffect hooks to test if they cause the loop
   console.log('DevicesPage render');
 
-  // Refresh handler - reload cameras from AI and check I/O units
+  // Refresh handler - reload cameras from AI and check Compute Units
   const handleRefresh = async () => {
     console.log('Manual refresh triggered');
     setIsRefreshing(true);
@@ -419,12 +419,12 @@ export const DevicesPage: React.FC = () => {
     setIsAddingDevice(true);
     setAddDeviceError('');
     
-    console.log('Adding I/O Unit with IP:', newDeviceIP.trim());
+    console.log('Adding Compute Unitswith IP:', newDeviceIP.trim());
     
     try {
       // Check if device is reachable and responds with "pong"
       const pingResult = await pingDevice(newDeviceIP.trim());
-      console.log('I/O Unit ping result:', pingResult);
+      console.log('Compute Units ping result:', pingResult);
       
       if (!pingResult.reachable) {
         // Device didn't respond with "pong" - show error and don't add
@@ -434,10 +434,10 @@ export const DevicesPage: React.FC = () => {
         return;
       }
       
-      // Device is valid - create and add the I/O Unit
+      // Device is valid - create and add the Compute Units
       const newIOUnit: IOUnit = {
         id: Date.now().toString(),
-        name: `I/O Unit ${ioUnits.length + 1}`,
+        name: `Compute Units ${ioUnits.length + 1}`,
         ipAddress: newDeviceIP.trim(),
         status: 'online', // We know it's online because ping succeeded
         inputs: 8,
@@ -445,7 +445,7 @@ export const DevicesPage: React.FC = () => {
         lastActivity: 'Just added'
       };
       
-      // Add to I/O Units array
+      // Add to Compute Units array
       setIOUnits(prev => [...prev, newIOUnit]);
       
       // Close modal and reset form
@@ -459,9 +459,9 @@ export const DevicesPage: React.FC = () => {
         await loadCamerasFromAI();
       }, 1000); // Small delay to ensure state updates
       
-      console.log('I/O Unit added successfully');
+      console.log('Compute Units added successfully');
     } catch (error) {
-      const errorMsg = `Failed to add I/O Unit: ${error}`;
+      const errorMsg = `Failed to add Compute Units: ${error}`;
       setAddDeviceError(errorMsg);
       console.error(errorMsg);
     } finally {
@@ -470,7 +470,7 @@ export const DevicesPage: React.FC = () => {
   };
 
   const handleRemoveIOUnit = (ioUnitId: string) => {
-    console.log('Removing I/O Unit with ID:', ioUnitId);
+    console.log('Removing Compute Units with ID:', ioUnitId);
     
     // Find the IO Unit to get its IP address
     const ioUnitToRemove = ioUnits.find(unit => unit.id === ioUnitId);
@@ -490,7 +490,7 @@ export const DevicesPage: React.FC = () => {
     // Remove the IO Unit itself
     setIOUnits(prev => {
       const newIOUnits = prev.filter(unit => unit.id !== ioUnitId);
-      console.log('I/O Unit removed successfully, remaining units:', newIOUnits.length);
+      console.log('Compute Units removed successfully, remaining units:', newIOUnits.length);
       
       // If no IO Units left, clear all cameras
       if (newIOUnits.length === 0) {
@@ -540,7 +540,7 @@ export const DevicesPage: React.FC = () => {
         <div>
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-bold text-foreground">Device Management</h1>
           <p className="mt-2 text-base lg:text-lg text-muted-foreground">
-            Manage cameras and I/O units
+            Manage cameras and Compute Units
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -557,7 +557,7 @@ export const DevicesPage: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors text-base lg:text-lg"
           >
             <Plus className="w-5 h-5" />
-            Add I/O Unit
+            Add Compute Units
           </button>
         </div>
       </div>
@@ -567,7 +567,7 @@ export const DevicesPage: React.FC = () => {
         <div className="fixed inset-0 z-50 w-full h-full flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className={`${modalBg} ${modalText} border border-border rounded-lg shadow-xl p-6 w-full max-w-md`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${modalText}`}>Add New I/O Unit</h3>
+              <h3 className={`text-lg font-semibold ${modalText}`}>Add New Compute Units</h3>
               <button
                 onClick={() => setShowAddDevice(false)}
                 className={`${theme === 'dark' ? 'text-gray-400 hover:text-gray-100' : 'text-gray-600 hover:text-gray-900'}`}
@@ -579,7 +579,7 @@ export const DevicesPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className={`block text-sm font-medium ${modalText} mb-2`}>
-                  I/O Unit IP Address
+                  Compute Units IP Address
                 </label>
                 <input
                   type="text"
@@ -606,7 +606,7 @@ export const DevicesPage: React.FC = () => {
                   disabled={!newDeviceIP.trim() || isAddingDevice}
                   className={`flex-1 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {isAddingDevice ? 'Checking Device...' : 'Add I/O Unit'}
+                  {isAddingDevice ? 'Checking Device...' : 'Add Compute Units'}
                 </button>
                 <button
                   onClick={() => {
@@ -661,7 +661,7 @@ export const DevicesPage: React.FC = () => {
         <div className="bg-card shadow rounded-lg border border-border p-4 lg:p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm lg:text-base text-muted-foreground">I/O Units</p>
+              <p className="text-sm lg:text-base text-muted-foreground">Compute Units</p>
               <p className={`text-2xl lg:text-3xl font-bold ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`}>
                 {ioUnits.length}
               </p>
@@ -718,11 +718,11 @@ export const DevicesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* I/O Units Section */}
+      {/* Compute Units Section */}
       <div className="space-y-4">
         <h2 className="text-xl lg:text-2xl font-bold text-foreground flex items-center gap-2">
           <Settings className="w-6 h-6" />
-          I/O Units ({ioUnits.length})
+          Compute Units ({ioUnits.length})
         </h2>
         
         <div className="grid gap-4 lg:gap-6">
@@ -754,7 +754,7 @@ export const DevicesPage: React.FC = () => {
                   <button 
                     onClick={() => handleRemoveIOUnit(ioUnit.id)}
                     className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors text-sm flex items-center gap-1"
-                    title="Remove I/O Unit"
+                    title="Remove Compute Units"
                   >
                     <Trash2 className="w-4 h-4" />
                     Remove
@@ -767,7 +767,7 @@ export const DevicesPage: React.FC = () => {
           {ioUnits.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No I/O units found. Add a new device to get started.</p>
+              <p>No Compute Units found. Add a new device to get started.</p>
             </div>
           )}
         </div>

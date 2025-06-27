@@ -6,6 +6,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true, // This enables --host functionality
+    port: 5173, // Optional: specify port explicitly
     proxy: {
       '/api': {
         target: 'http://localhost:8001',
