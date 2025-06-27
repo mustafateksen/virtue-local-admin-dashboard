@@ -30,7 +30,9 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
-CORS(app, origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://localhost:8000"])
+# Allow CORS for all origins (network access support)
+CORS(app, origins="*", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], 
+     allow_headers=["Content-Type", "Authorization"])
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

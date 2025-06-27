@@ -22,8 +22,23 @@ interface IOUnit {
   lastActivity: string;
 }
 
-// API Base URL - Flask backend (configurable) 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.1.225:8001';
+// Get dynamic API base URL based on current window location
+function getAPIBaseURL(): string {
+  // If we have an environment variable, use it
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // Otherwise, construct URL based on current host
+  const protocol = window.location.protocol; // http: or https:
+  const hostname = window.location.hostname; // Current IP or hostname
+  const port = '8001'; // Backend port
+  
+  return `${protocol}//${hostname}:${port}`;
+}
+
+// API Base URL - Flask backend (configurable and dynamic)
+const API_BASE_URL = getAPIBaseURL();
 
 // Ping function to check device status - must return "pong" to be valid
 const pingDevice = async (ip: string): Promise<{ reachable: boolean; response?: string }> => {
