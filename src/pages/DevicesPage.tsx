@@ -275,13 +275,10 @@ export const DevicesPage: React.FC = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [addDeviceError, setAddDeviceError] = useState<string>('');
   const [isAddingDevice, setIsAddingDevice] = useState(false);
-  const [isPollingEnabled, setIsPollingEnabled] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Polling interval for real-time sync (check every 10 seconds)
   useEffect(() => {
-    if (!isPollingEnabled) return;
-
     const pollInterval = setInterval(async () => {
       try {
         // Only poll if we're not currently doing other operations
@@ -319,12 +316,12 @@ export const DevicesPage: React.FC = () => {
     }, 10000); // Poll every 10 seconds
 
     return () => clearInterval(pollInterval);
-  }, [ioUnits, isRefreshing, isCheckingStatus, isAddingDevice, isPollingEnabled]);
+  }, [ioUnits, isRefreshing, isCheckingStatus, isAddingDevice]);
 
   // Handle page visibility changes - refresh when user comes back to the page
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && isPollingEnabled) {
+      if (document.visibilityState === 'visible') {
         console.log('👀 Page became visible, refreshing data...');
         try {
           const latestIOUnits = await loadIOUnitsFromBackend();
@@ -339,7 +336,7 @@ export const DevicesPage: React.FC = () => {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isPollingEnabled]);
+  }, []);
 
   // Load compute units from backend and cameras from AI system on component mount
   useEffect(() => {
@@ -778,18 +775,6 @@ export const DevicesPage: React.FC = () => {
             {isCheckingStatus ? 'Checking Status...' : 'Refresh'}
           </button>
           <button 
-            onClick={() => setIsPollingEnabled(!isPollingEnabled)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-base lg:text-lg ${
-              isPollingEnabled 
-                ? 'bg-green-500 hover:bg-green-600 text-white' 
-                : 'bg-gray-500 hover:bg-gray-600 text-white'
-            }`}
-            title={isPollingEnabled ? 'Auto-sync enabled' : 'Auto-sync disabled'}
-          >
-            <div className={`w-2 h-2 rounded-full ${isPollingEnabled ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
-            Auto-sync
-          </button>
-          <button 
             onClick={() => setShowAddDevice(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors text-base lg:text-lg"
           >
@@ -935,7 +920,7 @@ export const DevicesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
+                  <span className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
                     {getStatusIcon(camera.status)}
                     {camera.status}
                   </span>
@@ -979,14 +964,14 @@ export const DevicesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusBg(ioUnit.status)} ${getStatusColor(ioUnit.status)}`}>
+                  <span className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${getStatusBg(ioUnit.status)} ${getStatusColor(ioUnit.status)}`}>
                     {getStatusIcon(ioUnit.status)}
                     {ioUnit.status}
                   </span>
 
                   <button 
                     onClick={() => handleRemoveIOUnit(ioUnit.id)}
-                    className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors text-sm flex items-center gap-1"
+                    className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-full cursor-pointer transition-colors text-sm font-medium flex items-center gap-1"
                     title="Remove Compute Units"
                   >
                     <Trash2 className="w-4 h-4" />
