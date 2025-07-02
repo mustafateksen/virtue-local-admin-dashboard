@@ -29,7 +29,12 @@ function getAPIBaseURL(): string {
     return import.meta.env.VITE_API_BASE_URL;
   }
   
-  // Otherwise, construct URL based on current host
+  // Check if we're running in production (Docker) - use relative URLs
+  if (import.meta.env.PROD) {
+    return ''; // Use relative URLs in production (Nginx will proxy)
+  }
+  
+  // Otherwise, construct URL based on current host (development)
   const protocol = window.location.protocol; // http: or https:
   const hostname = window.location.hostname; // Current IP or hostname
   const port = '8001'; // Backend port

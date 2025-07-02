@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  virtue-admin:
+    build: .
+    ports:
+      - "5173:5173"  # Frontend port
+      - "8001:8001"  # Backend port
+    environment:
+      - DOCKER=true
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend/instance:/app/backend/instance  # Persist database
+    restart: unless-stopped
+    
+  # Production build with Nginx (alternative)
+  virtue-admin-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    ports:
+      - "80:80"   # All traffic through Nginx
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend/instance:/app/backend/instance
+    restart: unless-stopped
+    profiles:
+      - production

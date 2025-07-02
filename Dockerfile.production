@@ -1,0 +1,69 @@
+# Production Dockerfile with Nginx
+FROM node:18-alpine as frontend-builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY vite.config.ts ./
+COPY tailwind.config.js ./
+COPY eslint.config.js ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY src/ ./src/
+COPY public/ ./public/
+COPY index.html ./
+
+# Create production .env
+RUN echo "VITE_API_BASE_URL=" > .env
+
+# Build frontend for production
+RUN npm run build
+
+# Python backend stage
+FROM python:3.11-slim as backend
+
+WORKDIR /app/backend
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python requirements
+COPY backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Copy backend source
+COPY backend/ ./
+
+# Production stage with Nginx
+FROM nginx:alpine
+
+# Install Python and dependencies
+RUN apk add --no-cache python3 py3-pip gcc python3-dev musl-dev linux-headers
+
+# Copy Python backend
+COPY --from=backend /app/backend /app/backend
+COPY --from=backend /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=backend /usr/local/bin /usr/local/bin
+
+# Copy built frontend
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+
+# Copy Nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy startup script
+COPY docker-start.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-start.sh
+
+# Expose port 80 (Nginx will proxy everything)
+EXPOSE 80
+
+CMD ["/usr/local/bin/docker-start.sh"]

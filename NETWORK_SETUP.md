@@ -2,24 +2,39 @@
 
 Bu proje herhangi bir bilgisayarda otomatik olarak network'te çalışacak şekilde ayarlanmıştır.
 
-## Kurulum Adımları
+## Kurulum Seçenekleri
 
-### 1. Backend Kurulumu
+### Option 1: Docker ile Kurulum (Önerilen)
+
+```bash
+# Docker build
+./build-docker.sh
+
+# Development mode (Frontend + Backend ayrı portlarda)
+docker-compose up virtue-admin
+
+# Production mode (Tek port, Nginx proxy)
+docker-compose --profile production up virtue-admin-prod
+```
+
+**Network Erişimi:**
+- Development: `http://YOUR_IP:5173` (Frontend) + `http://YOUR_IP:8001` (Backend)
+- Production: `http://YOUR_IP` (Tek port, Nginx proxy)
+
+### Option 2: Yerel Kurulum
+
+#### 1. Backend Kurulumu
 ```bash
 cd backend
 pip install -r requirements.txt
 python app.py
 ```
 
-Backend `0.0.0.0:8001` adresinde çalışacaktır.
-
-### 2. Frontend Kurulumu
+#### 2. Frontend Kurulumu
 ```bash
 npm install
 npm run dev
 ```
-
-Frontend `0.0.0.0:5173` adresinde çalışacaktır.
 
 ## Network Erişimi
 
@@ -31,34 +46,45 @@ Vite başladığında şu çıktıyı göreceksiniz:
 
 **Network adresini kullanarak aynı ağdaki diğer cihazlardan erişebilirsiniz.**
 
+## Docker Avantajları
+
+1. **Tek Komut Kurulum**: Tüm dependencies otomatik
+2. **Network Uyumluluğu**: Host network modunda çalışır
+3. **AI System Erişimi**: Aynı ağdaki AI sistemlere erişim
+4. **Production Ready**: Nginx proxy ile optimize edilmiş
+
 ## Önemli Notlar
 
 1. **Firewall**: Eğer network'ten erişemiyorsanız, firewall ayarlarınızı kontrol edin:
-   - Windows: Windows Firewall'da 5173 ve 8001 portlarını açın
+   - Windows: Windows Firewall'da portları açın
    - macOS: System Preferences > Security & Privacy > Firewall'da portları açın
-   - Linux: `ufw allow 5173` ve `ufw allow 8001` komutlarını çalıştırın
+   - Linux: `ufw allow <port>` komutlarını çalıştırın
 
-2. **Otomatik IP Tespiti**: Kod otomatik olarak makinenizin IP adresini tespit eder ve API çağrılarını ona göre yapar.
+2. **Docker Network**: Docker kullanırken container host network'ü kullanır
+3. **AI System Access**: Container içinden host ağındaki AI sistemlere erişim var
 
-3. **Farklı Ağlarda**: Her ağda farklı IP aralıkları olabilir (192.168.1.x, 192.168.0.x, 10.0.0.x vs). Kod bunları otomatik handle eder.
+## Port Bilgileri
+
+### Development Mode
+- Frontend: 5173
+- Backend: 8001
+
+### Production Mode  
+- All-in-one: 80 (Nginx proxy)
 
 ## Sorun Giderme
 
-### Network'ten Erişemiyorum
-1. Firewall kontrol edin
-2. Backend ve frontend'in aynı makinede çalıştığından emin olun
-3. VPN bağlantısı varsa kapatın
-4. Antivirus yazılımının portları bloke etmediğini kontrol edin
-
-### API Çağrıları Çalışmıyor
-Kod otomatik olarak frontend'in çalıştığı IP'yi tespit edip backend için kullanır. Manuel olarak .env dosyasında da ayarlayabilirsiniz:
-
+### Docker'da Network Erişemi Yok
 ```bash
-# .env dosyasında
-VITE_API_BASE_URL=http://192.168.1.100:8001
+# Host network modunu kontrol edin
+docker-compose ps
+
+# Container loglarını kontrol edin
+docker-compose logs virtue-admin
 ```
 
-## Port Bilgileri
-- Frontend: 5173
-- Backend: 8001
-- Her ikisi de `0.0.0.0` (tüm network interfaces) üzerinde çalışır
+### AI System'a Bağlanamıyor
+Docker container'ı host network'ü kullandığı için AI sistemlere normal şekilde erişebilmelidir. Eğer sorun varsa:
+1. AI system'in aynı ağda olduğunu kontrol edin
+2. AI system'in 8000 portunda çalıştığını kontrol edin
+3. Firewall'ın AI system portunu bloke etmediğini kontrol edin

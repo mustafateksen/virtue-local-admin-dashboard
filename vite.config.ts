@@ -17,13 +17,16 @@ function getLocalIP() {
   return 'localhost'
 }
 
+// Check if running in Docker
+const isDocker = process.env.NODE_ENV === 'production' || process.env.DOCKER === 'true'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    host: '0.0.0.0', // Listen on all interfaces
+    host: '0.0.0.0', // Listen on all interfaces for Docker compatibility
     port: 5173,
-    proxy: {
+    proxy: isDocker ? undefined : {
       '/api': {
         target: `http://${getLocalIP()}:8001`,
         changeOrigin: true,
@@ -37,4 +40,8 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: '0.0.0.0', // Also listen on all interfaces for preview mode
+    port: 5173,
+  }
 })
