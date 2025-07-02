@@ -14,16 +14,56 @@ interface IOUnit {
   lastActivity: string;
 }
 
-// LocalStorage key (same as in DevicesPage)
-const IO_UNITS_STORAGE_KEY = 'virtue-devices-io-units';
+// Get dynamic API base URL based on current window location
+function getAPIBaseURL(): string {
+  // If we have an environment variable, use it
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // Check if we're running in production (Docker) - use relative URLs
+  if (import.meta.env.PROD) {
+    return ''; // Use relative URLs in production (Nginx will proxy)
+  }
+  
+  // Otherwise, construct URL based on current host (development)
+  const protocol = window.location.protocol; // http: or https:
+  const hostname = window.location.hostname; // Current IP or hostname
+  const port = '8001'; // Backend port
+  
+  return `${protocol}//${hostname}:${port}`;
+}
 
-// Helper function to load I/O units from localStorage
-const loadIOUnitsFromStorage = (): IOUnit[] => {
+// API Base URL - Flask backend (configurable and dynamic)
+const API_BASE_URL = getAPIBaseURL();
+
+// Backend API functions for Compute Units
+const loadIOUnitsFromBackend = async (): Promise<IOUnit[]> => {
   try {
-    const stored = localStorage.getItem(IO_UNITS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const response = await fetch(`${API_BASE_URL}/api/compute_units`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Convert backend format to frontend IOUnit format
+      return data.compute_units.map((unit: any) => ({
+        id: unit.id,
+        name: unit.name,
+        ipAddress: unit.ipAddress,
+        status: unit.status,
+        inputs: 4, // Default values
+        outputs: 4,
+        lastActivity: unit.lastSeen || 'Never'
+      }));
+    }
+    console.error('Failed to load compute units from backend');
+    return [];
   } catch (error) {
-    console.error('Failed to load I/O units from storage:', error);
+    console.error('Failed to load Compute Units from backend:', error);
     return [];
   }
 };
@@ -32,35 +72,91 @@ export const DashboardPage: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [ioUnits, setIOUnits] = useState<IOUnit[]>([]);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Load I/O units from localStorage on component mount
+  // Polling interval for real-time sync (check every 10 seconds)
   useEffect(() => {
-    const loadedUnits = loadIOUnitsFromStorage();
-    setIOUnits(loadedUnits);
+    const pollInterval = setInterval(async () => {
+      try {
+        // Only poll if we're not currently doing other operations
+        if (!isRefreshing) {
+          console.log('🔄 [Dashboard] Polling for updates...');
+          
+          // Load latest compute units from backend
+          const latestIOUnits = await loadIOUnitsFromBackend();
+          
+          // Check if there are any changes
+          const hasChanges = 
+            latestIOUnits.length !== ioUnits.length ||
+            latestIOUnits.some(unit => {
+              const existing = ioUnits.find(u => u.id === unit.id);
+              return !existing || 
+                     existing.status !== unit.status || 
+                     existing.name !== unit.name ||
+                     existing.ipAddress !== unit.ipAddress;
+            });
+          
+          if (hasChanges) {
+            console.log('📱 [Dashboard] Changes detected, updating state...');
+            setIOUnits(latestIOUnits);
+            
+            // Update last sync time
+            setLastSyncTime(new Date());
+          }
+        }
+      } catch (error) {
+        console.error('[Dashboard] Polling error:', error);
+      }
+    }, 10000); // Poll every 10 seconds
 
-    // Listen for storage changes to update when devices are added/removed
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === IO_UNITS_STORAGE_KEY) {
-        const updatedUnits = loadIOUnitsFromStorage();
-        setIOUnits(updatedUnits);
+    return () => clearInterval(pollInterval);
+  }, [ioUnits, isRefreshing]);
+
+  // Handle page visibility changes - refresh when user comes back to the page
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👀 [Dashboard] Page became visible, refreshing data...');
+        try {
+          setIsRefreshing(true);
+          const latestIOUnits = await loadIOUnitsFromBackend();
+          setIOUnits(latestIOUnits);
+          setLastSyncTime(new Date());
+        } catch (error) {
+          console.error('[Dashboard] Visibility refresh error:', error);
+        } finally {
+          setIsRefreshing(false);
+        }
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-
-    // Also listen for custom events within the same window (for DevicesPage changes)
-    const handleDevicesUpdate = () => {
-      const updatedUnits = loadIOUnitsFromStorage();
-      setIOUnits(updatedUnits);
-    };
-
-    window.addEventListener('ioUnitsUpdated', handleDevicesUpdate);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('ioUnitsUpdated', handleDevicesUpdate);
-    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
+
+  // Load compute units from backend on component mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setIsRefreshing(true);
+        console.log('🚀 [Dashboard] Loading initial data...');
+        
+        // Load compute units from backend
+        const backendIOUnits = await loadIOUnitsFromBackend();
+        setIOUnits(backendIOUnits);
+        setLastSyncTime(new Date());
+        
+        console.log(`✅ [Dashboard] Loaded ${backendIOUnits.length} compute units`);
+      } catch (error) {
+        console.error('[Dashboard] Failed to load initial data:', error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    };
+
+    loadInitialData();
+  }, []); // Empty dependency array - only run on mount
 
   // Calculate uptime display
   const getUptimeDisplay = (lastActivity: string, status: string) => {
@@ -164,6 +260,12 @@ export const DashboardPage: React.FC = () => {
           <div className="px-6 py-6 sm:p-8 h-full flex flex-col">
             <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
               Connected I/O Units
+              {/* Debug: Show last sync time */}
+              {lastSyncTime && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  (synced {lastSyncTime.toLocaleTimeString()})
+                </span>
+              )}
             </h3>
             <div className="space-y-4 flex-1">
               {ioUnits.length === 0 ? (
