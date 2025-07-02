@@ -893,6 +893,57 @@ class StreamerStatusResource(Resource):
         """Handle CORS preflight for streamer status endpoint"""
         return {}, 200
 
+# Supported Apps Resource - fetch supported apps from AI backend
+class SupportedAppsResource(Resource):
+    def get(self):
+        """Get supported apps for a specific compute unit from AI backend"""
+        try:
+            # Get Compute Unit IP from query parameter
+            compute_unit_ip = request.args.get('compute_unit_ip')
+            
+            if not compute_unit_ip:
+                return {'message': 'Compute Unit IP is required'}, 400
+                
+            # Fetch from specific Compute Unit's AI system
+            # Check if port is already included in the IP
+            if ':' in compute_unit_ip:
+                ai_url = f"http://{compute_unit_ip}/apps/device_dependent_info/supported_apps"
+            else:
+                ai_url = f"http://{compute_unit_ip}:8000/apps/device_dependent_info/supported_apps"
+                
+            try:
+                logger.info(f"Fetching supported apps from: {ai_url}")
+                response = requests.get(ai_url, timeout=10)
+                
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    logger.info(f"Successfully fetched supported apps from {compute_unit_ip}")
+                    return ai_data, 200
+                else:
+                    logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")
+                    return {
+                        'message': f'AI system returned HTTP {response.status_code}',
+                        'supported_apps': []
+                    }, 200
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to AI system at {compute_unit_ip}: {e}")
+                return {
+                    'message': f'Cannot connect to AI system: {str(e)}',
+                    'supported_apps': []
+                }, 200
+                
+        except Exception as e:
+            logger.error(f"Error in supported apps resource: {e}")
+            return {
+                'message': 'Failed to fetch supported apps',
+                'supported_apps': []
+            }, 500
+    
+    def options(self):
+        """Handle CORS preflight for supported apps endpoint"""
+        return {}, 200
+
 # Register API endpoints
 api.add_resource(AuthCheckResource, '/api/auth/check-registration')
 api.add_resource(RegisterResource, '/api/auth/register')
@@ -909,6 +960,7 @@ api.add_resource(CamerasResource, '/get_cameras')
 api.add_resource(StreamerStatusResource, '/get_streamer_statuses')
 api.add_resource(ComputeUnitsResource, '/api/compute_units')
 api.add_resource(ComputeUnitResource, '/api/compute_units/<int:unit_id>')
+api.add_resource(SupportedAppsResource, '/api/apps/supported')
 
 # Error handlers
 @app.errorhandler(404)
