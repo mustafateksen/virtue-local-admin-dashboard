@@ -126,6 +126,28 @@ class Streamer(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+class ComputeUnit(db.Model):
+    __tablename__ = 'compute_units'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    ip_address = db.Column(db.String(50), unique=True, nullable=False)
+    status = db.Column(db.String(20), default='offline')  # online, offline
+    last_seen = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'name': self.name,
+            'ipAddress': self.ip_address,
+            'status': self.status,
+            'lastSeen': self.last_seen.strftime('%Y-%m-%d %H:%M:%S') if self.last_seen else None,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 # Utility Functions
 def get_system_stats():
     """Get current system statistics"""
@@ -554,6 +576,117 @@ class PingResource(Resource):
         """Handle CORS preflight for ping endpoint"""
         return {}, 200
 
+# Compute Units Resource for managing compute units
+class ComputeUnitsResource(Resource):
+    def get(self):
+        """Get all compute units"""
+        try:
+            compute_units = ComputeUnit.query.all()
+            result = [unit.to_dict() for unit in compute_units]
+            logger.info(f"Retrieved {len(result)} compute units")
+            return {'compute_units': result}, 200
+        except Exception as e:
+            logger.error(f"Error retrieving compute units: {e}")
+            return {'message': 'Failed to retrieve compute units'}, 500
+    
+    def post(self):
+        """Add a new compute unit"""
+        try:
+            data = request.get_json()
+            if not data or 'ip_address' not in data:
+                return {'message': 'IP address is required'}, 400
+            
+            ip_address = data['ip_address'].strip()
+            name = data.get('name', f'Compute Unit {ip_address}')
+            
+            # Check if compute unit already exists
+            existing_unit = ComputeUnit.query.filter_by(ip_address=ip_address).first()
+            if existing_unit:
+                return {'message': 'Compute unit with this IP already exists'}, 409
+            
+            # Ping the compute unit to verify it's reachable using the detailed ping function
+            ping_result = ping_device_detailed(ip_address)
+            
+            if not ping_result['reachable']:
+                logger.warning(f"Compute unit at {ip_address} ping failed: {ping_result['response']}")
+                return {'message': f'Compute unit is not reachable: {ping_result["response"]}'}, 400
+            
+            logger.info(f"Compute unit at {ip_address} responded successfully: {ping_result['response']}")
+            
+            # Create new compute unit
+            new_unit = ComputeUnit(
+                name=name,
+                ip_address=ip_address,
+                status='online',
+                last_seen=datetime.datetime.utcnow()
+            )
+            
+            db.session.add(new_unit)
+            db.session.commit()
+            
+            logger.info(f"Added new compute unit: {name} ({ip_address})")
+            return {'compute_unit': new_unit.to_dict()}, 201
+            
+        except Exception as e:
+            logger.error(f"Error adding compute unit: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to add compute unit'}, 500
+    
+    def options(self):
+        """Handle CORS preflight for compute units endpoint"""
+        return {}, 200
+
+class ComputeUnitResource(Resource):
+    def delete(self, unit_id):
+        """Delete a compute unit"""
+        try:
+            compute_unit = ComputeUnit.query.get(unit_id)
+            if not compute_unit:
+                return {'message': 'Compute unit not found'}, 404
+            
+            ip_address = compute_unit.ip_address
+            db.session.delete(compute_unit)
+            db.session.commit()
+            
+            logger.info(f"Deleted compute unit: {ip_address}")
+            return {'message': 'Compute unit deleted successfully'}, 200
+            
+        except Exception as e:
+            logger.error(f"Error deleting compute unit: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to delete compute unit'}, 500
+    
+    def put(self, unit_id):
+        """Update compute unit status"""
+        try:
+            compute_unit = ComputeUnit.query.get(unit_id)
+            if not compute_unit:
+                return {'message': 'Compute unit not found'}, 404
+            
+            data = request.get_json()
+            if data:
+                if 'status' in data:
+                    compute_unit.status = data['status']
+                if 'name' in data:
+                    compute_unit.name = data['name']
+                
+                compute_unit.updated_at = datetime.datetime.utcnow()
+                if data.get('status') == 'online':
+                    compute_unit.last_seen = datetime.datetime.utcnow()
+                
+                db.session.commit()
+                
+            return {'compute_unit': compute_unit.to_dict()}, 200
+            
+        except Exception as e:
+            logger.error(f"Error updating compute unit: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to update compute unit'}, 500
+    
+    def options(self, unit_id):
+        """Handle CORS preflight for compute unit endpoint"""
+        return {}, 200
+
 # Streamers Resource for device management
 class StreamersResource(Resource):
     def get(self):
@@ -649,37 +782,40 @@ class StreamersResource(Resource):
 # Cameras Resource - proxy to main AI system
 class CamerasResource(Resource):
     def get(self):
-        """Get cameras from specific IO Unit via proxy"""
+        """Get cameras/streamers from specific Compute Unit via proxy"""
         try:
-            # Get IO Unit IP from query parameter
-            io_unit_ip = request.args.get('io_unit_ip')
+            # Get Compute Unit IP from query parameter
+            compute_unit_ip = request.args.get('compute_unit_ip')
             
-            if io_unit_ip:
-                # Fetch from specific IO Unit's AI system
+            if compute_unit_ip:
+                # Fetch from specific Compute Unit's AI system using new endpoint
                 # Check if port is already included in the IP
-                if ':' in io_unit_ip:
-                    main_ai_url = f"http://{io_unit_ip}/get_streamers"
+                if ':' in compute_unit_ip:
+                    ai_url = f"http://{compute_unit_ip}/streamers/public/get_streamers_infos"
                 else:
-                    main_ai_url = f"http://{io_unit_ip}:8000/get_streamers"
+                    ai_url = f"http://{compute_unit_ip}:8000/streamers/public/get_streamers_infos"
+                    
+                logger.info(f"Fetching streamers from: {ai_url}")
                 try:
-                    response = requests.get(main_ai_url, timeout=10)
+                    response = requests.get(ai_url, timeout=10)
                     if response.status_code == 200:
                         ai_data = response.json()
-                        # Add IO Unit IP to each camera for identification
+                        # Add Compute Unit IP to each streamer for identification
                         if ai_data.get('payload'):
-                            for camera in ai_data['payload']:
-                                camera['io_unit_ip'] = io_unit_ip
+                            for streamer in ai_data['payload']:
+                                streamer['compute_unit_ip'] = compute_unit_ip
+                        logger.info(f"Successfully fetched {len(ai_data.get('payload', []))} streamers from {compute_unit_ip}")
                         return ai_data, 200
                     else:
-                        logger.warning(f"AI system at {io_unit_ip} returned status {response.status_code}")
+                        logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")
                         return {'payload': []}, 200
                 except requests.exceptions.RequestException as e:
-                    logger.warning(f"Cannot connect to AI system at {io_unit_ip}: {e}")
+                    logger.warning(f"Cannot connect to AI system at {compute_unit_ip}: {e}")
                     return {'payload': []}, 200
             else:
-                # No IO Unit IP provided - return empty payload
-                # This prevents loading cameras when no IO Units exist
-                logger.info("No IO Unit IP provided, returning empty camera list")
+                # No Compute Unit IP provided - return empty payload
+                # This prevents loading cameras when no Compute Units exist
+                logger.info("No Compute Unit IP provided, returning empty camera list")
                 return {'payload': []}, 200
         except Exception as e:
             logger.error(f"Error in cameras resource: {e}")
@@ -771,6 +907,8 @@ api.add_resource(StreamersResource, '/get_streamers')
 api.add_resource(StreamersResource, '/add_streamer', endpoint='add_streamer')
 api.add_resource(CamerasResource, '/get_cameras')
 api.add_resource(StreamerStatusResource, '/get_streamer_statuses')
+api.add_resource(ComputeUnitsResource, '/api/compute_units')
+api.add_resource(ComputeUnitResource, '/api/compute_units/<int:unit_id>')
 
 # Error handlers
 @app.errorhandler(404)

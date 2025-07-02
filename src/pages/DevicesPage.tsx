@@ -5,11 +5,15 @@ import { useTheme } from '../contexts/ThemeContext';
 interface Camera {
   id: string;
   name: string;
-  ipAddress: string;
+  ipAddress: string; // This will be the Compute Unit IP
   status: 'online' | 'offline';
   resolution: string;
   fps: number;
   lastActivity: string;
+  streamerUuid: string;
+  streamerTypeUuid: string;
+  configTemplateName: string;
+  computeUnitIP: string; // Which compute unit this camera belongs to
 }
 
 interface IOUnit {
@@ -72,10 +76,10 @@ const pingDevice = async (ip: string): Promise<{ reachable: boolean; response?: 
   }
 };
 
-// Fetch cameras from a specific IO Unit via Flask proxy
-const getCamerasFromIOUnit = async (ioUnitIP: string): Promise<any[]> => {
+// Fetch cameras/streamers from a specific Compute Unit via Flask proxy
+const getCamerasFromIOUnit = async (computeUnitIP: string): Promise<any[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/get_cameras?io_unit_ip=${encodeURIComponent(ioUnitIP)}`, {
+    const response = await fetch(`${API_BASE_URL}/get_cameras?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -88,15 +92,15 @@ const getCamerasFromIOUnit = async (ioUnitIP: string): Promise<any[]> => {
     }
     return [];
   } catch (error) {
-    console.error(`Failed to get cameras from IO Unit ${ioUnitIP}:`, error);
+    console.error(`Failed to get cameras from Compute Unit ${computeUnitIP}:`, error);
     return [];
   }
 };
 
-// Fetch camera statuses from a specific IO Unit via Flask proxy
-const getCameraStatusesFromIOUnit = async (ioUnitIP: string): Promise<any> => {
+// Fetch camera statuses from a specific Compute Unit via Flask proxy
+const getCameraStatusesFromIOUnit = async (computeUnitIP: string): Promise<any> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/get_streamer_statuses?io_unit_ip=${encodeURIComponent(ioUnitIP)}`, {
+    const response = await fetch(`${API_BASE_URL}/get_cameras?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -105,41 +109,123 @@ const getCameraStatusesFromIOUnit = async (ioUnitIP: string): Promise<any> => {
     
     if (response.ok) {
       const data = await response.json();
-      return data;
+      return {
+        success: true,
+        compute_unit_ip: computeUnitIP,
+        cameras: data.payload || []
+      };
     }
     return { success: false, cameras: [] };
   } catch (error) {
-    console.error(`Failed to get camera statuses from IO Unit ${ioUnitIP}:`, error);
+    console.error(`Failed to get camera statuses from Compute Unit ${computeUnitIP}:`, error);
     return { success: false, cameras: [] };
   }
 };
 
-// LocalStorage keys - For both Compute Units and cameras
-const IO_UNITS_STORAGE_KEY = 'virtue-devices-io-units';
+// LocalStorage keys - For cameras only (Compute Units now come from backend)
 const CAMERAS_STORAGE_KEY = 'virtue-devices-cameras';
 
-// Helper functions for localStorage (Compute Units)
-const loadIOUnitsFromStorage = (): IOUnit[] => {
+// Backend API functions for Compute Units
+const loadIOUnitsFromBackend = async (): Promise<IOUnit[]> => {
   try {
-    const stored = localStorage.getItem(IO_UNITS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const response = await fetch(`${API_BASE_URL}/api/compute_units`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Convert backend format to frontend IOUnit format
+      return data.compute_units.map((unit: any) => ({
+        id: unit.id,
+        name: unit.name,
+        ipAddress: unit.ipAddress,
+        status: unit.status,
+        inputs: 4, // Default values
+        outputs: 4,
+        lastActivity: unit.lastSeen || 'Never'
+      }));
+    }
+    console.error('Failed to load compute units from backend');
+    return [];
   } catch (error) {
-    console.error('Failed to load Compute Units from storage:', error);
+    console.error('Failed to load Compute Units from backend:', error);
     return [];
   }
 };
 
-const saveIOUnitsToStorage = (ioUnits: IOUnit[]) => {
+const saveIOUnitToBackend = async (ipAddress: string, name?: string): Promise<IOUnit | null> => {
   try {
-    localStorage.setItem(IO_UNITS_STORAGE_KEY, JSON.stringify(ioUnits));
-    // Dispatch custom event to notify other components (like DashboardPage)
-    window.dispatchEvent(new CustomEvent('ioUnitsUpdated'));
+    const response = await fetch(`${API_BASE_URL}/api/compute_units`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ip_address: ipAddress,
+        name: name || `Compute Unit ${ipAddress}`
+      }),
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Convert backend format to frontend IOUnit format
+      const unit = data.compute_unit;
+      return {
+        id: unit.id,
+        name: unit.name,
+        ipAddress: unit.ipAddress,
+        status: unit.status,
+        inputs: 4, // Default values
+        outputs: 4,
+        lastActivity: unit.lastSeen || 'Just added'
+      };
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to add compute unit');
+    }
   } catch (error) {
-    console.error('Failed to save Compute Units to storage:', error);
+    console.error('Failed to save Compute Unit to backend:', error);
+    throw error;
   }
 };
 
-// Helper functions for localStorage (cameras)
+const deleteIOUnitFromBackend = async (unitId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/compute_units/${unitId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to delete Compute Unit from backend:', error);
+    return false;
+  }
+};
+
+const updateIOUnitStatusInBackend = async (unitId: string, status: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/compute_units/${unitId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to update Compute Unit status in backend:', error);
+    return false;
+  }
+};
+
+// Helper functions for localStorage (cameras) - kept for now as cameras come from AI systems
 const loadCamerasFromStorage = (): Camera[] => {
   try {
     const stored = localStorage.getItem(CAMERAS_STORAGE_KEY);
@@ -158,25 +244,30 @@ const saveCamerasToStorage = (cameras: Camera[]) => {
   }
 };
 
-// Convert AI camera data to our Camera interface
-const convertAICameraToCamera = (aiCamera: any): Camera => {
+// Convert AI streamer data to our Camera interface
+const convertAIStreamerToCamera = (aiStreamer: any): Camera => {
   return {
-    id: aiCamera.id.toString(),
-    name: aiCamera.streamer_hr_name,
-    ipAddress: aiCamera.io_unit_ip || 'N/A', // Show IO Unit IP
-    status: aiCamera.is_alive === '1' ? 'online' : 'offline',
+    id: aiStreamer.id.toString(),
+    name: aiStreamer.streamer_hr_name,
+    ipAddress: aiStreamer.compute_unit_ip || 'N/A', // Show Compute Unit IP
+    status: aiStreamer.is_alive === '1' || aiStreamer.is_alive === 1 ? 'online' : 'offline',
     resolution: '1920x1080', // Default
     fps: 30, // Default
-    lastActivity: aiCamera.updated_at || 'Unknown'
+    lastActivity: aiStreamer.updated_at || 'Unknown',
+    streamerUuid: aiStreamer.streamer_uuid,
+    streamerTypeUuid: aiStreamer.streamer_type_uuid,
+    configTemplateName: aiStreamer.config_template_name,
+    computeUnitIP: aiStreamer.compute_unit_ip || 'N/A'
   };
 };
 
 export const DevicesPage: React.FC = () => {
   const { theme } = useTheme();
   
-  // Cameras come from AI system AND localStorage, Compute Units from localStorage
-  const [cameras, setCameras] = useState<Camera[]>(() => loadCamerasFromStorage());
-  const [ioUnits, setIOUnits] = useState<IOUnit[]>(() => loadIOUnitsFromStorage());
+  // Cameras come from AI system and localStorage, Compute Units from backend
+  // Start with empty cameras array, they will be loaded after compute units are fetched
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [ioUnits, setIOUnits] = useState<IOUnit[]>([]);
 
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newDeviceIP, setNewDeviceIP] = useState('');
@@ -184,24 +275,109 @@ export const DevicesPage: React.FC = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [addDeviceError, setAddDeviceError] = useState<string>('');
   const [isAddingDevice, setIsAddingDevice] = useState(false);
+  const [isPollingEnabled, setIsPollingEnabled] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // Load cameras from AI system on component mount only
+  // Polling interval for real-time sync (check every 10 seconds)
   useEffect(() => {
-    // Only load on initial mount, not when ioUnits change
-    if (ioUnits.length > 0) {
-      loadCamerasFromAI();
-    }
+    if (!isPollingEnabled) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Only poll if we're not currently doing other operations
+        if (!isRefreshing && !isCheckingStatus && !isAddingDevice) {
+          console.log('🔄 Polling for updates...');
+          
+          // Load latest compute units from backend
+          const latestIOUnits = await loadIOUnitsFromBackend();
+          
+          // Check if there are any changes
+          const hasChanges = 
+            latestIOUnits.length !== ioUnits.length ||
+            latestIOUnits.some(unit => {
+              const existing = ioUnits.find(u => u.id === unit.id);
+              return !existing || 
+                     existing.status !== unit.status || 
+                     existing.name !== unit.name ||
+                     existing.ipAddress !== unit.ipAddress;
+            });
+          
+          if (hasChanges) {
+            console.log('📱 Changes detected, updating state...');
+            setIOUnits(latestIOUnits);
+            
+            // Also refresh cameras if compute units changed
+            await loadCamerasFromAI(latestIOUnits);
+            
+            // Update last sync time
+            setLastSyncTime(new Date());
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [ioUnits, isRefreshing, isCheckingStatus, isAddingDevice, isPollingEnabled]);
+
+  // Handle page visibility changes - refresh when user comes back to the page
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isPollingEnabled) {
+        console.log('👀 Page became visible, refreshing data...');
+        try {
+          const latestIOUnits = await loadIOUnitsFromBackend();
+          setIOUnits(latestIOUnits);
+          await loadCamerasFromAI(latestIOUnits);
+          setLastSyncTime(new Date());
+        } catch (error) {
+          console.error('Visibility refresh error:', error);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isPollingEnabled]);
+
+  // Load compute units from backend and cameras from AI system on component mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        // Load compute units from backend
+        const backendIOUnits = await loadIOUnitsFromBackend();
+        setIOUnits(backendIOUnits);
+        
+        // Always call loadCamerasFromAI to handle the camera loading logic
+        // If no compute units exist, it will clear cameras
+        await loadCamerasFromAI(backendIOUnits);
+        
+        // Set initial sync time
+        setLastSyncTime(new Date());
+      } catch (error) {
+        console.error('Failed to load initial data:', error);
+      }
+    };
+    
+    loadInitialData();
   }, []); // Empty dependency array - only run on mount
 
-  // Save Compute Units to localStorage whenever they change
-  useEffect(() => {
-    saveIOUnitsToStorage(ioUnits);
-  }, [ioUnits]);
-
-  // Save cameras to localStorage whenever they change
+  // Save cameras to localStorage whenever they change (compute units are synced with backend)
   useEffect(() => {
     saveCamerasToStorage(cameras);
   }, [cameras]);
+
+  // Format last sync time for display
+  const formatLastSync = (date: Date | null) => {
+    if (!date) return 'Never';
+    const now = new Date();
+    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
+    return date.toLocaleTimeString();
+  };
 
   // Load cameras from AI system and update existing ones
   const loadCamerasFromAI = async (currentIOUnits?: IOUnit[]) => {
@@ -212,21 +388,23 @@ export const DevicesPage: React.FC = () => {
       
       // Only try to load cameras if we have IO Units
       if (unitsToCheck.length === 0) {
-        console.log('No IO Units found, clearing all cameras');
+        console.log('No IO Units found, clearing all cameras from both state and localStorage');
         setCameras([]);
+        // Also clear localStorage to prevent showing old cameras
+        saveCamerasToStorage([]);
         return;
       }
       
       // Load cameras from each IO Unit (both online and offline)
       for (const ioUnit of unitsToCheck) {
-        console.log(`Checking cameras from IO Unit: ${ioUnit.ipAddress} (Status: ${ioUnit.status})`);
+        console.log(`Checking cameras from Compute Unit: ${ioUnit.ipAddress} (Status: ${ioUnit.status})`);
         try {
           const ioUnitCameras = await getCamerasFromIOUnit(ioUnit.ipAddress);
           if (ioUnitCameras && ioUnitCameras.length > 0) {
-            // Add IO Unit IP to each camera for proper association
+            // Add Compute Unit IP to each camera for proper association
             const camerasWithIOUnit = ioUnitCameras.map(camera => ({
               ...camera,
-              io_unit_ip: ioUnit.ipAddress
+              compute_unit_ip: ioUnit.ipAddress
             }));
             newCamerasFromAPI = [...newCamerasFromAPI, ...camerasWithIOUnit];
             console.log(`Successfully loaded ${ioUnitCameras.length} cameras from ${ioUnit.ipAddress}`);
@@ -243,13 +421,13 @@ export const DevicesPage: React.FC = () => {
       
       if (newCamerasFromAPI.length > 0) {
         // We got fresh data from API - update cameras
-        const convertedCameras = newCamerasFromAPI.map(convertAICameraToCamera);
+        const convertedCameras = newCamerasFromAPI.map(convertAIStreamerToCamera);
         setCameras(convertedCameras);
         console.log('Updated cameras with fresh data from API:', convertedCameras);
       } else {
-        // No fresh data from API - keep existing cameras but mark them as offline if their IO Unit is offline
+        // No fresh data from API - keep existing cameras but mark them as offline if their Compute Unit is offline
         const updatedExistingCameras = existingCameras.map(camera => {
-          const correspondingIOUnit = unitsToCheck.find(unit => unit.ipAddress === camera.ipAddress);
+          const correspondingIOUnit = unitsToCheck.find(unit => unit.ipAddress === camera.computeUnitIP);
           if (correspondingIOUnit && correspondingIOUnit.status === 'offline') {
             return {
               ...camera,
@@ -260,9 +438,9 @@ export const DevicesPage: React.FC = () => {
           return camera;
         });
         
-        // Filter out cameras whose IO Units no longer exist
+        // Filter out cameras whose Compute Units no longer exist
         const filteredCameras = updatedExistingCameras.filter(camera => 
-          unitsToCheck.some(unit => unit.ipAddress === camera.ipAddress)
+          unitsToCheck.some(unit => unit.ipAddress === camera.computeUnitIP)
         );
         
         setCameras(filteredCameras);
@@ -296,6 +474,17 @@ export const DevicesPage: React.FC = () => {
       
       setIOUnits(updatedIOUnits);
       
+      // Update backend with new statuses
+      await Promise.all(
+        updatedIOUnits.map(async (ioUnit) => {
+          try {
+            await updateIOUnitStatusInBackend(ioUnit.id, ioUnit.status);
+          } catch (error) {
+            console.error(`Failed to update status for unit ${ioUnit.id}:`, error);
+          }
+        })
+      );
+      
       // Get only online IO Units for camera status checking
       const onlineIOUnits = updatedIOUnits.filter(unit => unit.status === 'online');
       const offlineIOUnits = updatedIOUnits.filter(unit => unit.status === 'offline');
@@ -303,7 +492,7 @@ export const DevicesPage: React.FC = () => {
       // Mark cameras from offline IO Units as offline
       const existingCameras = cameras.length > 0 ? cameras : loadCamerasFromStorage();
       const camerasWithOfflineUpdate = existingCameras.map(camera => {
-        const isIOUnitOffline = offlineIOUnits.some(unit => unit.ipAddress === camera.ipAddress);
+        const isIOUnitOffline = offlineIOUnits.some(unit => unit.ipAddress === camera.computeUnitIP);
         if (isIOUnitOffline) {
           return {
             ...camera,
@@ -314,9 +503,9 @@ export const DevicesPage: React.FC = () => {
         return camera;
       });
       
-      // Filter out cameras whose IO Units no longer exist
+      // Filter out cameras whose Compute Units no longer exist
       const filteredCameras = camerasWithOfflineUpdate.filter(camera => 
-        updatedIOUnits.some(unit => unit.ipAddress === camera.ipAddress)
+        updatedIOUnits.some(unit => unit.ipAddress === camera.computeUnitIP)
       );
       
       setCameras(filteredCameras);
@@ -374,18 +563,18 @@ export const DevicesPage: React.FC = () => {
       
       // Update camera statuses based on the fetched data
       const updatedCameras = currentCameras.map(camera => {
-        // Find status update for this camera's IO Unit
-        const statusUpdate = statusUpdates.find(update => update.ioUnitIP === camera.ipAddress);
+        // Find status update for this camera's Compute Unit
+        const statusUpdate = statusUpdates.find(update => update.ioUnitIP === camera.computeUnitIP);
         
         if (statusUpdate && statusUpdate.cameras.length > 0) {
           // Find this specific camera in the status data
           const cameraStatus = statusUpdate.cameras.find(
-            (statusCamera: any) => statusCamera.streamer_uuid === camera.id || 
+            (statusCamera: any) => statusCamera.streamer_uuid === camera.streamerUuid || 
                            statusCamera.streamer_hr_name === camera.name
           );
           
           if (cameraStatus) {
-            const isAlive = cameraStatus.is_alive === 'true' || cameraStatus.is_alive === true;
+            const isAlive = cameraStatus.is_alive === '1' || cameraStatus.is_alive === 1;
             return {
               ...camera,
               status: isAlive ? 'online' as const : 'offline' as const,
@@ -394,8 +583,8 @@ export const DevicesPage: React.FC = () => {
           }
         }
         
-        // If no status found or IO Unit is offline, mark camera as offline
-        const correspondingIOUnit = onlineIOUnits.find(unit => unit.ipAddress === camera.ipAddress);
+        // If no status found or Compute Unit is offline, mark camera as offline
+        const correspondingIOUnit = onlineIOUnits.find(unit => unit.ipAddress === camera.computeUnitIP);
         if (!correspondingIOUnit) {
           return {
             ...camera,
@@ -415,8 +604,23 @@ export const DevicesPage: React.FC = () => {
     }
   };
 
-  // Removed all useEffect hooks to test if they cause the loop
-  console.log('DevicesPage render');
+  // Debug function to log network info and API status
+  const logNetworkAndApiInfo = () => {
+    console.log('=== DEVICE PAGE DEBUG INFO ===');
+    console.log('API_BASE_URL:', API_BASE_URL);
+    console.log('Current Compute Units:', ioUnits.length);
+    console.log('Current Cameras:', cameras.length);
+    console.log('Camera Compute Unit mapping:');
+    cameras.forEach(camera => {
+      console.log(`  - ${camera.name} (${camera.streamerUuid}) -> Compute Unit: ${camera.computeUnitIP}`);
+    });
+    console.log('==============================');
+  };
+
+  // Log info on component mount
+  useEffect(() => {
+    logNetworkAndApiInfo();
+  }, [cameras, ioUnits]);
 
   // Refresh handler - reload cameras from AI and check Compute Units
   const handleRefresh = async () => {
@@ -439,49 +643,31 @@ export const DevicesPage: React.FC = () => {
     setIsAddingDevice(true);
     setAddDeviceError('');
     
-    console.log('Adding Compute Unitswith IP:', newDeviceIP.trim());
+    console.log('Adding Compute Unit with IP:', newDeviceIP.trim());
     
     try {
-      // Check if device is reachable and responds with "pong"
-      const pingResult = await pingDevice(newDeviceIP.trim());
-      console.log('Compute Units ping result:', pingResult);
+      // Add compute unit via backend API - it will also check ping
+      const newIOUnit = await saveIOUnitToBackend(newDeviceIP.trim(), `Compute Unit ${ioUnits.length + 1}`);
       
-      if (!pingResult.reachable) {
-        // Device didn't respond with "pong" - show error and don't add
-        const errorMsg = `Device not found at ${newDeviceIP.trim()}.\n\nError: ${pingResult.response}`;
-        setAddDeviceError(errorMsg);
-        console.error(errorMsg);
-        return;
+      if (newIOUnit) {
+        // Add to local state
+        setIOUnits(prev => [...prev, newIOUnit]);
+        
+        // Close modal and reset form
+        setShowAddDevice(false);
+        setNewDeviceIP('');
+        setAddDeviceError('');
+        
+        // Load cameras from this new IO Unit
+        console.log('Loading cameras from the new IO Unit...');
+        setTimeout(async () => {
+          await loadCamerasFromAI();
+        }, 1000); // Small delay to ensure state updates
+        
+        console.log('Compute Unit added successfully');
       }
-      
-      // Device is valid - create and add the Compute Units
-      const newIOUnit: IOUnit = {
-        id: Date.now().toString(),
-        name: `Compute Units ${ioUnits.length + 1}`,
-        ipAddress: newDeviceIP.trim(),
-        status: 'online', // We know it's online because ping succeeded
-        inputs: 8,
-        outputs: 4,
-        lastActivity: 'Just added'
-      };
-      
-      // Add to Compute Units array
-      setIOUnits(prev => [...prev, newIOUnit]);
-      
-      // Close modal and reset form
-      setShowAddDevice(false);
-      setNewDeviceIP('');
-      setAddDeviceError('');
-      
-      // Load cameras from this new IO Unit
-      console.log('Loading cameras from the new IO Unit...');
-      setTimeout(async () => {
-        await loadCamerasFromAI();
-      }, 1000); // Small delay to ensure state updates
-      
-      console.log('Compute Units added successfully');
     } catch (error) {
-      const errorMsg = `Failed to add Compute Units: ${error}`;
+      const errorMsg = `Failed to add Compute Unit: ${error}`;
       setAddDeviceError(errorMsg);
       console.error(errorMsg);
     } finally {
@@ -489,37 +675,49 @@ export const DevicesPage: React.FC = () => {
     }
   };
 
-  const handleRemoveIOUnit = (ioUnitId: string) => {
-    console.log('Removing Compute Units with ID:', ioUnitId);
+  const handleRemoveIOUnit = async (ioUnitId: string) => {
+    console.log('Removing Compute Unit with ID:', ioUnitId);
     
-    // Find the IO Unit to get its IP address
-    const ioUnitToRemove = ioUnits.find(unit => unit.id === ioUnitId);
-    if (ioUnitToRemove) {
-      // Remove cameras that belong to this IO Unit
-      // The camera's ipAddress field contains the IO Unit IP (from io_unit_ip)
-      setCameras(prev => {
-        const filteredCameras = prev.filter(camera => 
-          camera.ipAddress !== ioUnitToRemove.ipAddress
-        );
-        console.log(`Removed cameras from IO Unit: ${ioUnitToRemove.ipAddress}`);
-        console.log('Remaining cameras after removal:', filteredCameras);
-        return filteredCameras;
-      });
-    }
-    
-    // Remove the IO Unit itself
-    setIOUnits(prev => {
-      const newIOUnits = prev.filter(unit => unit.id !== ioUnitId);
-      console.log('Compute Units removed successfully, remaining units:', newIOUnits.length);
-      
-      // If no IO Units left, clear all cameras
-      if (newIOUnits.length === 0) {
-        console.log('No IO Units left, clearing all cameras');
-        setCameras([]);
+    try {
+      // Find the IO Unit to get its IP address
+      const ioUnitToRemove = ioUnits.find(unit => unit.id === ioUnitId);
+      if (ioUnitToRemove) {
+        // Remove from backend
+        const success = await deleteIOUnitFromBackend(ioUnitId);
+        
+        if (success) {
+          // Remove cameras that belong to this Compute Unit
+          setCameras(prev => {
+            const filteredCameras = prev.filter(camera => 
+              camera.computeUnitIP !== ioUnitToRemove.ipAddress
+            );
+            console.log(`Removed cameras from Compute Unit: ${ioUnitToRemove.ipAddress}`);
+            console.log('Remaining cameras after removal:', filteredCameras);
+            return filteredCameras;
+          });
+          
+          // Remove the IO Unit from local state
+          setIOUnits(prev => {
+            const newIOUnits = prev.filter(unit => unit.id !== ioUnitId);
+            console.log('Compute Unit removed successfully, remaining units:', newIOUnits.length);
+            
+            // If no IO Units left, clear all cameras
+            if (newIOUnits.length === 0) {
+              console.log('No IO Units left, clearing all cameras from both state and localStorage');
+              setCameras([]);
+              // Also clear localStorage to prevent showing old cameras
+              saveCamerasToStorage([]);
+            }
+            
+            return newIOUnits;
+          });
+        } else {
+          console.error('Failed to remove Compute Unit from backend');
+        }
       }
-      
-      return newIOUnits;
-    });
+    } catch (error) {
+      console.error('Error removing Compute Unit:', error);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -559,9 +757,16 @@ export const DevicesPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-bold text-foreground">Device Management</h1>
-          <p className="mt-2 text-base lg:text-lg text-muted-foreground">
-            Manage cameras and Compute Units
-          </p>
+          <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+            <p className="text-base lg:text-lg text-muted-foreground">
+              Manage cameras and Compute Units
+            </p>
+            {lastSyncTime && (
+              <span className="text-sm text-muted-foreground">
+                • Last sync: {formatLastSync(lastSyncTime)}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button
@@ -571,6 +776,18 @@ export const DevicesPage: React.FC = () => {
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing || isCheckingStatus ? 'animate-spin' : ''}`} />
             {isCheckingStatus ? 'Checking Status...' : 'Refresh'}
+          </button>
+          <button 
+            onClick={() => setIsPollingEnabled(!isPollingEnabled)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-base lg:text-lg ${
+              isPollingEnabled 
+                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                : 'bg-gray-500 hover:bg-gray-600 text-white'
+            }`}
+            title={isPollingEnabled ? 'Auto-sync enabled' : 'Auto-sync disabled'}
+          >
+            <div className={`w-2 h-2 rounded-full ${isPollingEnabled ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
+            Auto-sync
           </button>
           <button 
             onClick={() => setShowAddDevice(true)}
@@ -708,7 +925,8 @@ export const DevicesPage: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg lg:text-xl font-semibold text-foreground">{camera.name}</h3>
-                    <p className="text-sm lg:text-base text-muted-foreground font-mono">{camera.ipAddress}</p>
+                    <p className="text-sm lg:text-base text-muted-foreground font-mono">{camera.computeUnitIP}</p>
+                    <p className="text-xs text-muted-foreground">UUID: {camera.streamerUuid}</p>
                     <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                       <span>Resolution: {camera.resolution}</span>
                       <span>FPS: {camera.fps}</span>
@@ -721,9 +939,6 @@ export const DevicesPage: React.FC = () => {
                     {getStatusIcon(camera.status)}
                     {camera.status}
                   </span>
-                  <button className="px-3 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors text-sm">
-                    Configure
-                  </button>
                 </div>
               </div>
             </div>
@@ -768,9 +983,7 @@ export const DevicesPage: React.FC = () => {
                     {getStatusIcon(ioUnit.status)}
                     {ioUnit.status}
                   </span>
-                  <button className="px-3 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors text-sm">
-                    Configure
-                  </button>
+
                   <button 
                     onClick={() => handleRemoveIOUnit(ioUnit.id)}
                     className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors text-sm flex items-center gap-1"
@@ -791,6 +1004,11 @@ export const DevicesPage: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Last Sync Time */}
+      <div className="text-sm text-muted-foreground">
+        Last sync: <strong>{formatLastSync(lastSyncTime)}</strong>
       </div>
     </div>
   );
