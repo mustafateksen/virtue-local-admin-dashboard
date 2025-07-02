@@ -944,6 +944,167 @@ class SupportedAppsResource(Resource):
         """Handle CORS preflight for supported apps endpoint"""
         return {}, 200
 
+# App Assignment Management Resources
+class StreamerAppAssignmentsResource(Resource):
+    def get(self):
+        """Get app assignments for a specific streamer from AI backend"""
+        try:
+            # Get parameters
+            compute_unit_ip = request.args.get('compute_unit_ip')
+            streamer_uuid = request.args.get('streamer_uuid')
+            
+            if not compute_unit_ip:
+                return {'message': 'Compute Unit IP is required'}, 400
+                
+            # Fetch from specific Compute Unit's AI system
+            if ':' in compute_unit_ip:
+                ai_url = f"http://{compute_unit_ip}/apps/public/get_streamer_app_assignments"
+            else:
+                ai_url = f"http://{compute_unit_ip}:8000/apps/public/get_streamer_app_assignments"
+                
+            # Add streamer_uuid as query parameter if provided
+            if streamer_uuid:
+                ai_url += f"?streamer_uuid={streamer_uuid}"
+                
+            try:
+                logger.info(f"Fetching app assignments from: {ai_url}")
+                response = requests.get(ai_url, timeout=10)
+                
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    logger.info(f"Successfully fetched app assignments from {compute_unit_ip}")
+                    return ai_data, 200
+                else:
+                    logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")
+                    return {
+                        'message': f'AI system returned HTTP {response.status_code}',
+                        'assignments': []
+                    }, 200
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to AI system at {compute_unit_ip}: {e}")
+                return {
+                    'message': f'Cannot connect to AI system: {str(e)}',
+                    'assignments': []
+                }, 200
+                
+        except Exception as e:
+            logger.error(f"Error in app assignments resource: {e}")
+            return {
+                'message': 'Failed to fetch app assignments',
+                'assignments': []
+            }, 500
+    
+    def options(self):
+        """Handle CORS preflight for app assignments endpoint"""
+        return {}, 200
+
+class StreamerAppAssignmentUpdateResource(Resource):
+    def put(self):
+        """Update/Create app assignment for a streamer via AI backend"""
+        try:
+            # Get parameters
+            compute_unit_ip = request.args.get('compute_unit_ip')
+            data = request.get_json()
+            
+            if not compute_unit_ip:
+                return {'message': 'Compute Unit IP is required'}, 400
+                
+            if not data:
+                return {'message': 'Request body is required'}, 400
+                
+            # Fetch from specific Compute Unit's AI system
+            if ':' in compute_unit_ip:
+                ai_url = f"http://{compute_unit_ip}/apps/public/update_streamer_app_assignment"
+            else:
+                ai_url = f"http://{compute_unit_ip}:8000/apps/public/update_streamer_app_assignment"
+                
+            try:
+                logger.info(f"Updating app assignment at: {ai_url}")
+                response = requests.put(ai_url, json=data, timeout=10)
+                
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    logger.info(f"Successfully updated app assignment at {compute_unit_ip}")
+                    return ai_data, 200
+                else:
+                    logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")
+                    return {
+                        'message': f'AI system returned HTTP {response.status_code}',
+                        'success': False
+                    }, response.status_code
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to AI system at {compute_unit_ip}: {e}")
+                return {
+                    'message': f'Cannot connect to AI system: {str(e)}',
+                    'success': False
+                }, 500
+                
+        except Exception as e:
+            logger.error(f"Error in app assignment update resource: {e}")
+            return {
+                'message': 'Failed to update app assignment',
+                'success': False
+            }, 500
+    
+    def options(self):
+        """Handle CORS preflight for app assignment update endpoint"""
+        return {}, 200
+
+class StreamerAppAssignmentDeleteResource(Resource):
+    def delete(self):
+        """Delete app assignment for a streamer via AI backend"""
+        try:
+            # Get parameters
+            compute_unit_ip = request.args.get('compute_unit_ip')
+            data = request.get_json()
+            
+            if not compute_unit_ip:
+                return {'message': 'Compute Unit IP is required'}, 400
+                
+            if not data or 'assignment_uuid' not in data:
+                return {'message': 'assignment_uuid is required in request body'}, 400
+                
+            # Fetch from specific Compute Unit's AI system
+            if ':' in compute_unit_ip:
+                ai_url = f"http://{compute_unit_ip}/apps/public/delete_streamer_app_assignment"
+            else:
+                ai_url = f"http://{compute_unit_ip}:8000/apps/public/delete_streamer_app_assignment"
+                
+            try:
+                logger.info(f"Deleting app assignment at: {ai_url}")
+                response = requests.delete(ai_url, json=data, timeout=10)
+                
+                if response.status_code == 200:
+                    ai_data = response.json()
+                    logger.info(f"Successfully deleted app assignment at {compute_unit_ip}")
+                    return ai_data, 200
+                else:
+                    logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")
+                    return {
+                        'message': f'AI system returned HTTP {response.status_code}',
+                        'success': False
+                    }, response.status_code
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Cannot connect to AI system at {compute_unit_ip}: {e}")
+                return {
+                    'message': f'Cannot connect to AI system: {str(e)}',
+                    'success': False
+                }, 500
+                
+        except Exception as e:
+            logger.error(f"Error in app assignment delete resource: {e}")
+            return {
+                'message': 'Failed to delete app assignment',
+                'success': False
+            }, 500
+    
+    def options(self):
+        """Handle CORS preflight for app assignment delete endpoint"""
+        return {}, 200
+
 # Register API endpoints
 api.add_resource(AuthCheckResource, '/api/auth/check-registration')
 api.add_resource(RegisterResource, '/api/auth/register')
@@ -961,6 +1122,9 @@ api.add_resource(StreamerStatusResource, '/get_streamer_statuses')
 api.add_resource(ComputeUnitsResource, '/api/compute_units')
 api.add_resource(ComputeUnitResource, '/api/compute_units/<int:unit_id>')
 api.add_resource(SupportedAppsResource, '/api/apps/supported')
+api.add_resource(StreamerAppAssignmentsResource, '/api/apps/assignments')
+api.add_resource(StreamerAppAssignmentUpdateResource, '/api/apps/assignments/update')
+api.add_resource(StreamerAppAssignmentDeleteResource, '/api/apps/assignments/delete')
 
 # Error handlers
 @app.errorhandler(404)

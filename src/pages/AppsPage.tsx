@@ -42,6 +42,23 @@ interface SupportedAppsResponse {
   supported_apps: SupportedApp[];
 }
 
+interface AppAssignment {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  manuel_timestamp: string;
+  assignment_uuid: string;
+  streamer_uuid: string;
+  app_name: string;
+  app_config_template_name: string;
+  is_active: string;
+}
+
+interface AppAssignmentsResponse {
+  message?: string;
+  assignments: AppAssignment[];
+}
+
 interface Camera {
   id: string;
   name: string;
@@ -146,7 +163,18 @@ const fetchSupportedApps = async (computeUnitIP: string): Promise<SupportedApp[]
 };
 
 // Convert AI streamer data to our Camera interface for Apps page
-const convertAIStreamerToCameraForApps = (aiStreamer: any): Camera => {
+const convertAIStreamerToCameraForApps = async (aiStreamer: any, computeUnitIP: string): Promise<Camera> => {
+  // Load current assignments for this streamer
+  let features: string[] = [];
+  try {
+    const assignments = await fetchAppAssignments(computeUnitIP, aiStreamer.streamer_uuid);
+    features = assignments
+      .filter(assignment => assignment.is_active === 'true')
+      .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+  } catch (error) {
+    console.error(`Failed to load assignments for streamer ${aiStreamer.streamer_uuid}:`, error);
+  }
+
   return {
     id: aiStreamer.id.toString(),
     name: aiStreamer.streamer_hr_name,
@@ -158,7 +186,7 @@ const convertAIStreamerToCameraForApps = (aiStreamer: any): Camera => {
     streamerTypeUuid: aiStreamer.streamer_type_uuid,
     configTemplateName: aiStreamer.config_template_name,
     computeUnitIP: aiStreamer.compute_unit_ip || 'N/A',
-    features: [] // Will be loaded/configured separately
+    features
   };
 };
 
@@ -185,6 +213,75 @@ const calculateUptime = (lastSeen: string): string => {
   }
 };
 
+// Fetch app assignments for a specific streamer
+const fetchAppAssignments = async (computeUnitIP: string, streamerUuid: string): Promise<AppAssignment[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/apps/assignments?compute_unit_ip=${encodeURIComponent(computeUnitIP)}&streamer_uuid=${encodeURIComponent(streamerUuid)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const data: AppAssignmentsResponse = await response.json();
+      return data.assignments || [];
+    } else {
+      console.error(`Failed to fetch app assignments for ${streamerUuid}: HTTP ${response.status}`);
+      return [];
+    }
+  } catch (error) {
+    console.error(`Failed to fetch app assignments for ${streamerUuid}:`, error);
+    return [];
+  }
+};
+
+// Update/Create app assignment
+const updateAppAssignment = async (
+  computeUnitIP: string, 
+  assignment: {
+    manuel_timestamp: string;
+    assignment_uuid: string;
+    streamer_uuid: string;
+    app_name: string;
+    app_config_template_name: string;
+    is_active: string;
+  }
+): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/apps/assignments/update?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(assignment),
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to update app assignment:', error);
+    return false;
+  }
+};
+
+// Delete app assignment
+const deleteAppAssignment = async (computeUnitIP: string, assignmentUuid: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/apps/assignments/delete?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assignment_uuid: assignmentUuid }),
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to delete app assignment:', error);
+    return false;
+  }
+};
+
 export const AppsPage: React.FC = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -200,6 +297,7 @@ export const AppsPage: React.FC = () => {
     features: string[];
     unitId: string;
     cameraId: string;
+    streamerUuid: string;
   } | null>(null);
 
   // Load compute units and their cameras
@@ -216,7 +314,9 @@ export const AppsPage: React.FC = () => {
           try {
             if (unit.status === 'online') {
               const cameraData = await getCamerasFromIOUnit(unit.ipAddress);
-              const cameras = cameraData.map(convertAIStreamerToCameraForApps);
+              const cameras = await Promise.all(
+                cameraData.map((aiStreamer) => convertAIStreamerToCameraForApps(aiStreamer, unit.ipAddress))
+              );
               return { ...unit, cameras };
             } else {
               // If unit is offline, cameras should be empty or marked as inactive
@@ -288,28 +388,33 @@ export const AppsPage: React.FC = () => {
     onClose: () => void;
     cameraName: string;
     computeUnitIP: string;
+    streamerUuid: string;
     selectedFeatures: string[];
     onFeaturesChange: (features: string[]) => void;
-  }> = ({ isOpen, onClose, cameraName, computeUnitIP, selectedFeatures, onFeaturesChange }) => {
+  }> = ({ isOpen, onClose, cameraName, computeUnitIP, streamerUuid, selectedFeatures, onFeaturesChange }) => {
     const [supportedApps, setSupportedApps] = useState<SupportedApp[]>([]);
+    const [currentAssignments, setCurrentAssignments] = useState<AppAssignment[]>([]);
     const [loading, setLoading] = useState(false);
+    const [savingChanges, setSavingChanges] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedApp, setSelectedApp] = useState<string>('');
     const [selectedResults, setSelectedResults] = useState<string[]>([]);
     const { theme } = useTheme();
 
-    // Load supported apps when modal opens
+    // Load supported apps and current assignments when modal opens
     useEffect(() => {
-      if (isOpen) {
+      if (isOpen && computeUnitIP && streamerUuid) {
         loadSupportedApps();
+        loadCurrentAssignments();
       }
-    }, [isOpen]);
+    }, [isOpen, computeUnitIP, streamerUuid]);
 
     // Reset form when modal opens
     useEffect(() => {
       if (isOpen) {
         setSelectedApp('');
         setSelectedResults([]);
+        setError(null);
       }
     }, [isOpen]);
 
@@ -328,6 +433,19 @@ export const AppsPage: React.FC = () => {
       }
     };
 
+    const loadCurrentAssignments = async () => {
+      try {
+        const assignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
+        setCurrentAssignments(assignments);
+        
+        // Note: We don't call onFeaturesChange here to avoid infinite loops
+        // The parent component should already have the correct features from the initial load
+      } catch (error) {
+        console.error('Failed to load current assignments:', error);
+        setCurrentAssignments([]);
+      }
+    };
+
     const getSelectedAppObject = () => {
       return supportedApps.find(app => app.app_name === selectedApp);
     };
@@ -340,34 +458,111 @@ export const AppsPage: React.FC = () => {
       );
     };
 
-    const handleAddFeatures = () => {
-      const newFeatures = selectedResults.map(resultName => `${selectedApp}.${resultName}`);
-      const updatedFeatures = [...selectedFeatures];
+    const handleAddFeatures = async () => {
+      if (!selectedApp || selectedResults.length === 0) return;
       
-      newFeatures.forEach(feature => {
-        if (!updatedFeatures.includes(feature)) {
-          updatedFeatures.push(feature);
+      setSavingChanges(true);
+      try {
+        // Create assignments for each selected result
+        const addPromises = selectedResults.map(async (resultName) => {
+          const assignmentUuid = `${streamerUuid}_${selectedApp}_${resultName}_${Date.now()}`;
+          const assignment = {
+            manuel_timestamp: new Date().toISOString(),
+            assignment_uuid: assignmentUuid,
+            streamer_uuid: streamerUuid,
+            app_name: selectedApp,
+            app_config_template_name: resultName,
+            is_active: 'true'
+          };
+          
+          const success = await updateAppAssignment(computeUnitIP, assignment);
+          if (!success) {
+            throw new Error(`Failed to add assignment for ${selectedApp}.${resultName}`);
+          }
+          return assignment;
+        });
+
+        await Promise.all(addPromises);
+        
+        // Reload assignments to get the latest state
+        await loadCurrentAssignments();
+        
+        // Update parent component with new features
+        const updatedAssignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
+        const features = updatedAssignments
+          .filter(assignment => assignment.is_active === 'true')
+          .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+        onFeaturesChange(features);
+        
+        // Reset form
+        setSelectedApp('');
+        setSelectedResults([]);
+        
+      } catch (error) {
+        console.error('Failed to add features:', error);
+        setError('Failed to add selected features. Please try again.');
+      } finally {
+        setSavingChanges(false);
+      }
+    };
+
+    const handleRemoveFeature = async (featureToRemove: string) => {
+      const [appName, resultName] = featureToRemove.split('.', 2);
+      
+      // Find the assignment to remove
+      const assignmentToRemove = currentAssignments.find(
+        assignment => assignment.app_name === appName && 
+                     assignment.app_config_template_name === resultName &&
+                     assignment.is_active === 'true'
+      );
+      
+      if (!assignmentToRemove) {
+        console.warn('Assignment not found for feature:', featureToRemove);
+        return;
+      }
+
+      setSavingChanges(true);
+      try {
+        const success = await deleteAppAssignment(computeUnitIP, assignmentToRemove.assignment_uuid);
+        if (!success) {
+          throw new Error(`Failed to remove assignment for ${featureToRemove}`);
         }
-      });
-      
-      onFeaturesChange(updatedFeatures);
-      setSelectedApp('');
-      setSelectedResults([]);
+        
+        // Reload assignments to get the latest state
+        await loadCurrentAssignments();
+        
+        // Update parent component with new features
+        const updatedAssignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
+        const features = updatedAssignments
+          .filter(assignment => assignment.is_active === 'true')
+          .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+        onFeaturesChange(features);
+        
+      } catch (error) {
+        console.error('Failed to remove feature:', error);
+        setError('Failed to remove feature. Please try again.');
+      } finally {
+        setSavingChanges(false);
+      }
     };
 
-    const handleRemoveFeature = (featureToRemove: string) => {
-      onFeaturesChange(selectedFeatures.filter(f => f !== featureToRemove));
-    };
+    const canAddFeatures = selectedApp && selectedResults.length > 0 && !savingChanges;
 
-    const canAddFeatures = selectedApp && selectedResults.length > 0;
-
-    // Theme-based styles
+    // Theme-based modal styles
     const modalBg = theme === 'dark' ? 'bg-slate-800' : 'bg-white';
+    const modalBorder = theme === 'dark' ? 'border-slate-600' : 'border-gray-200';
     const textColor = theme === 'dark' ? 'text-gray-100' : 'text-gray-900';
     const subtextColor = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
-    const borderColor = theme === 'dark' ? 'border-gray-600' : 'border-gray-300';
     const inputBg = theme === 'dark' ? 'bg-slate-700' : 'bg-white';
-    const hoverBg = theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100';
+    const inputBorder = theme === 'dark' ? 'border-slate-600' : 'border-gray-300';
+    const hoverBg = theme === 'dark' ? 'hover:bg-slate-700' : 'hover:bg-gray-50';
+    const selectedBg = theme === 'dark' ? 'bg-blue-900/30 border-blue-500' : 'bg-blue-50 border-blue-200';
+    const checkboxBg = theme === 'dark' ? 'bg-slate-600' : 'bg-white';
+    const checkboxBorder = theme === 'dark' ? 'border-slate-500' : 'border-gray-400';
+    const checkboxHover = theme === 'dark' ? 'hover:border-slate-400' : 'hover:border-blue-400';
+    const errorBg = theme === 'dark' ? 'bg-red-900/50' : 'bg-red-50';
+    const errorBorder = theme === 'dark' ? 'border-red-700' : 'border-red-200';
+    const errorText = theme === 'dark' ? 'text-red-300' : 'text-red-800';
 
     if (!isOpen) return null;
 
@@ -380,40 +575,40 @@ export const AppsPage: React.FC = () => {
         />
         
         {/* Modal */}
-        <div className={`relative w-full max-w-2xl ${modalBg} rounded-lg shadow-xl border border-border max-h-[90vh] overflow-hidden flex flex-col`}>
+        <div className={`relative w-full max-w-2xl mx-4 ${modalBg} rounded-lg shadow-xl border ${modalBorder} max-h-[90vh] overflow-hidden flex flex-col`}>
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-border">
-            <h2 className={`text-xl font-semibold ${textColor}`}>
+          <div className={`flex items-center justify-between p-4 sm:p-6 border-b ${modalBorder}`}>
+            <h2 className={`text-lg sm:text-xl font-semibold ${textColor} truncate pr-4`}>
               Configure Apps for {cameraName}
             </h2>
             <button
               onClick={onClose}
-              className={`p-2 rounded-lg ${hoverBg} transition-colors`}
+              className={`flex-shrink-0 p-2 rounded-lg ${hoverBg} transition-colors`}
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+            {/* Error State */}
+            {error && (
+              <div className={`${errorBg} border ${errorBorder} rounded-lg p-4`}>
+                <p className={`${errorText} text-sm`}>{error}</p>
+                <button
+                  onClick={() => setError(null)}
+                  className={`mt-2 ${errorText} hover:opacity-80 text-sm underline`}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             {/* Loading State */}
             {loading && (
               <div className="text-center py-8">
                 <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">Loading supported apps...</p>
-              </div>
-            )}
-
-            {/* Error State */}
-            {error && (
-              <div className="text-center py-8">
-                <p className="text-red-500 mb-4">{error}</p>
-                <button
-                  onClick={loadSupportedApps}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  Retry
-                </button>
               </div>
             )}
 
@@ -431,7 +626,7 @@ export const AppsPage: React.FC = () => {
                       setSelectedApp(e.target.value);
                       setSelectedResults([]);
                     }}
-                    className={`w-full px-3 py-2 ${inputBg} ${textColor} border ${borderColor} rounded-lg focus:ring-2 focus:ring-primary focus:border-primary`}
+                    className={`w-full px-3 py-2 ${inputBg} ${textColor} border ${inputBorder} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   >
                     <option value="">Choose an application...</option>
                     {supportedApps.map((app) => (
@@ -448,35 +643,35 @@ export const AppsPage: React.FC = () => {
                     <label className={`block text-sm font-medium ${textColor} mb-2`}>
                       2. Select Results ({selectedResults.length} selected)
                     </label>
-                    <div className="space-y-2 max-h-60 overflow-y-auto border border-border rounded-lg p-3">
+                    <div className={`space-y-2 max-h-60 overflow-y-auto border ${inputBorder} rounded-lg p-3`}>
                       {getSelectedAppObject()?.results.map((result) => (
                         <div
                           key={result.result_name}
                           className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                             selectedResults.includes(result.result_name) 
-                              ? 'bg-primary/10 border border-primary' 
+                              ? selectedBg
                               : `${hoverBg} border border-transparent`
                           }`}
                           onClick={() => handleResultToggle(result.result_name)}
                         >
-                          <div className={`flex h-5 w-5 items-center justify-center rounded border-2 mt-0.5 ${
+                          <div className={`flex h-5 w-5 items-center justify-center rounded border-2 mt-0.5 transition-all ${
                             selectedResults.includes(result.result_name)
-                              ? 'border-primary bg-primary'
-                              : `border-gray-300 ${theme === 'dark' ? 'bg-slate-700' : 'bg-white'}`
+                              ? 'border-blue-500 bg-blue-500'
+                              : `${checkboxBorder} ${checkboxBg} ${checkboxHover}`
                           }`}>
                             {selectedResults.includes(result.result_name) && (
-                              <Check className="h-3 w-3 text-white" />
+                              <Check className="h-3 w-3 text-white font-bold" strokeWidth={3} />
                             )}
                           </div>
-                          <div className="flex-1">
-                            <div className={`font-medium ${textColor} text-sm`}>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium ${textColor} text-sm truncate`}>
                               {result.result_name}
                             </div>
-                            <div className={`text-xs ${subtextColor} mt-1`}>
+                            <div className={`text-xs ${subtextColor} mt-1 truncate`}>
                               Type: {result.result_data_type}
                             </div>
                             {result.description && (
-                              <div className={`text-xs ${subtextColor} mt-1 opacity-75`}>
+                              <div className={`text-xs ${subtextColor} mt-1 opacity-75 line-clamp-2`}>
                                 {result.description}
                               </div>
                             )}
@@ -492,11 +687,15 @@ export const AppsPage: React.FC = () => {
                   <div className="flex justify-end">
                     <button
                       onClick={handleAddFeatures}
-                      disabled={!canAddFeatures}
+                      disabled={!canAddFeatures || savingChanges}
                       className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Plus className="h-4 w-4" />
-                      Add Selected Features
+                      {savingChanges ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      {savingChanges ? 'Adding...' : 'Add Selected Features'}
                     </button>
                   </div>
                 )}
@@ -515,21 +714,26 @@ export const AppsPage: React.FC = () => {
                     return (
                       <div
                         key={feature}
-                        className={`flex items-center justify-between p-3 rounded-lg border border-border ${hoverBg}`}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${inputBorder} ${hoverBg} gap-3`}
                       >
-                        <div>
-                          <div className={`font-medium ${textColor} text-sm`}>
+                        <div className="min-w-0 flex-1">
+                          <div className={`font-medium ${textColor} text-sm truncate`}>
                             {resultName || appName}
                           </div>
-                          <div className={`text-xs ${subtextColor}`}>
+                          <div className={`text-xs ${subtextColor} truncate`}>
                             App: {appName}
                           </div>
                         </div>
                         <button
                           onClick={() => handleRemoveFeature(feature)}
-                          className="p-1 text-red-500 hover:bg-red-100 rounded transition-colors"
+                          disabled={savingChanges}
+                          className="flex-shrink-0 p-1 text-red-500 hover:bg-red-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <X className="h-4 w-4" />
+                          {savingChanges ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     );
@@ -547,10 +751,10 @@ export const AppsPage: React.FC = () => {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-3 p-6 border-t border-border">
+          <div className={`flex justify-end gap-3 p-4 sm:p-6 border-t ${modalBorder}`}>
             <button
               onClick={onClose}
-              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              className={`px-4 py-2 ${subtextColor} hover:${textColor} transition-colors`}
             >
               Close
             </button>
@@ -696,66 +900,127 @@ export const AppsPage: React.FC = () => {
       <div className="space-y-6">
         {filteredUnits.map((unit) => (
           <div key={unit.id} className="bg-card rounded-lg border border-border">
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {/* Unit Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <Cpu className="h-8 w-8 text-primary" />
-                  <div>
-                    <h3 className="text-xl lg:text-2xl font-semibold text-foreground">{unit.name}</h3>
-                    <p className="text-sm text-muted-foreground">{unit.ipAddress} • Uptime: {unit.uptime}</p>
+              <div className="flex items-center justify-between mb-4 sm:mb-6 gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                  <Cpu className="h-6 w-6 sm:h-8 sm:w-8 text-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold text-foreground truncate">{unit.name}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{unit.ipAddress} • Uptime: {unit.uptime}</p>
                   </div>
                 </div>
-                <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatusBg(unit.status)} ${getStatusColor(unit.status)}`}>
+                <span className={`px-3 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 ${getStatusBg(unit.status)} ${getStatusColor(unit.status)}`}>
                   {unit.status.charAt(0).toUpperCase() + unit.status.slice(1)}
                 </span>
               </div>
 
               {/* Cameras Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {unit.cameras.map((camera) => (
-                  <div key={camera.id} className="bg-muted/50 rounded-lg p-4 space-y-4">
+                  <div key={camera.id} className="bg-muted/50 rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4">
                     {/* Camera Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Camera className="h-5 w-5 text-muted-foreground" />
-                        <span className="font-medium text-foreground">{camera.name}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
+                        <span className="font-medium text-foreground text-sm truncate">{camera.name}</span>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
+                      <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
                         {camera.status}
                       </span>
                     </div>
 
                     {/* Camera Info */}
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div>Resolution: {camera.resolution}</div>
-                      <div>FPS: {camera.fps}</div>
-                      <div>Last Activity: {camera.lastActivity}</div>
+                    <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-muted-foreground">
+                      <div className="truncate">Resolution: {camera.resolution}</div>
+                      <div className="truncate">FPS: {camera.fps}</div>
+                      <div className="truncate">Last Activity: {camera.lastActivity}</div>
                     </div>
 
                     {/* Features Section */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-foreground">Active Features</span>
+                        {camera.features.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {camera.features.length} feature{camera.features.length > 1 ? 's' : ''}
+                          </span>
+                        )}
                       </div>
 
-                      {/* Active Apps */}
-                      <div className="flex flex-wrap gap-1">
-                        {camera.features.length > 0 ? camera.features.map((featureKey) => {
-                          // Parse app_name.result_name format
-                          const [appName, resultName] = featureKey.split('.', 2);
-                          const displayName = resultName || appName; // Fallback for old format
-                          return (
-                            <span
-                              key={featureKey}
-                              className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                              title={featureKey} // Show full key on hover
-                            >
-                              {displayName}
-                            </span>
-                          );
-                        }) : (
-                          <span className="text-xs text-muted-foreground italic">No features configured</span>
+                      {/* Active Apps - Grouped by App */}
+                      <div className="space-y-3">
+                        {camera.features.length > 0 ? (() => {
+                          // Group features by app
+                          const groupedFeatures = camera.features.reduce((acc, featureKey) => {
+                            const [appName, resultName] = featureKey.split('.', 2);
+                            if (!acc[appName]) {
+                              acc[appName] = [];
+                            }
+                            acc[appName].push(resultName || appName);
+                            return acc;
+                          }, {} as Record<string, string[]>);
+
+                          // App color mapping
+                          const appColors = theme === 'dark' ? [
+                            { bg: 'bg-blue-900/50', text: 'text-blue-300', border: 'border-blue-700' },
+                            { bg: 'bg-green-900/50', text: 'text-green-300', border: 'border-green-700' },
+                            { bg: 'bg-purple-900/50', text: 'text-purple-300', border: 'border-purple-700' },
+                            { bg: 'bg-orange-900/50', text: 'text-orange-300', border: 'border-orange-700' },
+                            { bg: 'bg-red-900/50', text: 'text-red-300', border: 'border-red-700' },
+                            { bg: 'bg-yellow-900/50', text: 'text-yellow-300', border: 'border-yellow-700' },
+                            { bg: 'bg-indigo-900/50', text: 'text-indigo-300', border: 'border-indigo-700' },
+                            { bg: 'bg-pink-900/50', text: 'text-pink-300', border: 'border-pink-700' },
+                          ] : [
+                            { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
+                            { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
+                            { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' },
+                            { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200' },
+                            { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
+                            { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
+                            { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200' },
+                            { bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200' },
+                          ];
+
+                          return Object.entries(groupedFeatures).map(([appName, results], appIndex) => {
+                            const colorScheme = appColors[appIndex % appColors.length];
+                            return (
+                              <div key={appName} className="space-y-2">
+                                {/* App Name Header */}
+                                <div className={`flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-md border ${colorScheme.border} bg-transparent`}>
+                                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                    theme === 'dark' 
+                                      ? colorScheme.text.replace('text-', 'bg-').replace('-300', '-400')
+                                      : colorScheme.text.replace('text-', 'bg-')
+                                  }`}></div>
+                                  <span className={`text-xs font-semibold ${colorScheme.text} truncate`}>{appName}</span>
+                                  <span className={`text-xs opacity-75 ${colorScheme.text} flex-shrink-0`}>
+                                    ({results.length} result{results.length > 1 ? 's' : ''})
+                                  </span>
+                                </div>
+                                
+                                {/* Results */}
+                                <div className="flex flex-wrap gap-1 ml-2 sm:ml-4">
+                                  {results.map((resultName) => (
+                                    <span
+                                      key={`${appName}.${resultName}`}
+                                      className={`px-2 py-1 rounded text-xs font-medium ${colorScheme.bg} ${colorScheme.text} border ${colorScheme.border} opacity-90 truncate max-w-full`}
+                                      title={`${appName}.${resultName}`}
+                                    >
+                                      {resultName}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })() : (
+                          <div className={`text-center py-4 border-2 border-dashed rounded-lg ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
+                            <span className="text-xs text-muted-foreground italic">No features configured</span>
+                            <p className="text-xs text-muted-foreground mt-1">Click "Configure Apps" to add features</p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -769,14 +1034,15 @@ export const AppsPage: React.FC = () => {
                             computeUnitIP: unit.ipAddress,
                             features: camera.features,
                             unitId: unit.id,
-                            cameraId: camera.id
+                            cameraId: camera.id,
+                            streamerUuid: camera.streamerUuid
                           });
                           setModalOpen(true);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-6 py-3 text-base bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+                        className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
                       >
-                        <Settings className="h-5 w-5" />
-                        <span>Configure Apps</span>
+                        <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                        <span className="truncate">Configure Apps</span>
                       </button>
                     </div>
                   </div>
@@ -813,6 +1079,7 @@ export const AppsPage: React.FC = () => {
           }}
           cameraName={selectedCamera.name}
           computeUnitIP={selectedCamera.computeUnitIP}
+          streamerUuid={selectedCamera.streamerUuid}
           selectedFeatures={selectedCamera.features}
           onFeaturesChange={(features: string[]) => {
             // Update the camera features in the state
