@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Monitor, 
-  FileWarning,
   Settings, 
   Cpu, 
   LogOut,
@@ -12,8 +11,7 @@ import {
   X,
   Sun,
   Moon,
-  Package,
-  SaveAll
+  Package
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,10 +27,8 @@ interface SidebarProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, type: 'link' },
   { name: 'Monitor Streamers', href: '/monitor', icon: Monitor, type: 'link' },
-  { name: 'Logs', href: '/logs', icon: FileWarning, type: 'link' },
   { name: 'All Devices', href: '/devices', icon: Cpu, type: 'link' },
   { name: 'Apps', href: '/apps', icon: Package, type: 'link' },
-  { name: 'Learned Products', href: '/learned-products', icon: SaveAll, type: 'link' },
   { name: 'Settings', href: '/settings', icon: Settings, type: 'link' },
   { name: 'Theme Toggle', icon: 'theme', type: 'button', action: 'toggleTheme' },
   { name: 'Logout', icon: LogOut, type: 'button', action: 'logout' },
@@ -241,7 +237,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     key={item.name}
                     onClick={handleClick}
                     className={cn(
-                      "group flex items-center w-full px-3 py-3 text-base font-medium rounded-lg transition-colors relative",
+                      "cursor-pointer group flex items-center w-full px-3 py-3 text-base font-medium rounded-lg transition-colors relative",
                       theme === 'dark'
                         ? "text-gray-400 hover:bg-slate-800 hover:text-white"
                         : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"

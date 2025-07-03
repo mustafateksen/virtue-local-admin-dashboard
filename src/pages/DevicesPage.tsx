@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Cpu, Plus, RefreshCw, CheckCircle, X, Settings, Wifi, WifiOff, Trash2 } from 'lucide-react';
+import { Camera, Cpu, Plus, RefreshCw, CheckCircle, X, Settings, Wifi, WifiOff, Trash2, Star, StarOff } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useFavorites } from '../contexts/FavoritesContext';
+import type { FavoriteStreamer } from '../contexts/FavoritesContext';
 
 interface Camera {
   id: string;
@@ -263,6 +265,7 @@ const convertAIStreamerToCamera = (aiStreamer: any): Camera => {
 
 export const DevicesPage: React.FC = () => {
   const { theme } = useTheme();
+  const { addToFavorites, removeFromFavorites, isFavorite } = useFavorites();
   
   // Cameras come from AI system and localStorage, Compute Units from backend
   // Start with empty cameras array, they will be loaded after compute units are fetched
@@ -717,6 +720,26 @@ export const DevicesPage: React.FC = () => {
     }
   };
 
+  // Handle adding/removing cameras from favorites
+  const handleToggleFavorite = (camera: Camera) => {
+    const favoriteStreamer: FavoriteStreamer = {
+      id: `${camera.computeUnitIP}-${camera.streamerUuid}`,
+      streamerUuid: camera.streamerUuid,
+      streamerHrName: camera.name,
+      streamerType: camera.streamerTypeUuid || 'camera',
+      configTemplateName: 'default', // You can update this if you have this data
+      computeUnitIP: camera.computeUnitIP,
+      isAlive: camera.status === 'online' ? 'true' : 'false',
+      addedAt: new Date().toISOString()
+    };
+
+    if (isFavorite(camera.streamerUuid)) {
+      removeFromFavorites(camera.streamerUuid);
+    } else {
+      addToFavorites(favoriteStreamer);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'online': return theme === 'dark' ? 'text-green-400' : 'text-green-600';
@@ -769,14 +792,14 @@ export const DevicesPage: React.FC = () => {
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || isCheckingStatus}
-            className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors text-base lg:text-lg disabled:opacity-50"
+            className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors text-base lg:text-lg disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing || isCheckingStatus ? 'animate-spin' : ''}`} />
             {isCheckingStatus ? 'Checking Status...' : 'Refresh'}
           </button>
           <button 
             onClick={() => setShowAddDevice(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors text-base lg:text-lg"
+            className="cursor-pointer hover:scale-102 duration-300 transition-all ease-in-out flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg  text-base lg:text-lg"
           >
             <Plus className="w-5 h-5" />
             Add Compute Units
@@ -920,6 +943,21 @@ export const DevicesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleToggleFavorite(camera)}
+                    className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                      isFavorite(camera.streamerUuid)
+                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-800'
+                        : 'border border-border hover:bg-accent'
+                    }`}
+                    title={isFavorite(camera.streamerUuid) ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {isFavorite(camera.streamerUuid) ? (
+                      <Star className="w-4 h-4 fill-current" />
+                    ) : (
+                      <StarOff className="w-4 h-4" />
+                    )}
+                  </button>
                   <span className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${getStatusBg(camera.status)} ${getStatusColor(camera.status)}`}>
                     {getStatusIcon(camera.status)}
                     {camera.status}

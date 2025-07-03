@@ -6,17 +6,26 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import os
 import psutil
 import datetime
 import json
 import time
 import threading
-import requests
+import requests # Add requests for proxying
 from typing import Dict, List, Optional
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the AI Service URL from environment variables
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000") # Default to localhost:8000 if not set
 
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -1207,13 +1216,159 @@ def create_tables():
 def health_check():
     return {'status': 'healthy', 'timestamp': datetime.datetime.utcnow().isoformat()}
 
+# New route to fetch the last frame from the AI service
+@app.route('/api/streamers/last_frame', methods=['POST'])
+def get_streamer_last_frame_proxy():
+    data = request.get_json()
+    streamer_uuid = data.get('streamer_uuid')
+
+    if not streamer_uuid:
+        return jsonify({"error": "streamer_uuid is required"}), 400
+
+    try:
+        # The endpoint on the actual AI service
+        ai_service_endpoint = f"{AI_SERVICE_URL}/streamers/public/get_streamer_last_frame"
+        
+        response = requests.post(ai_service_endpoint, json={"streamer_uuid": streamer_uuid})
+        
+        # Check if the request to the AI service was successful
+        response.raise_for_status()
+        
+        # Forward the JSON response from the AI service to the client
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        # Handle potential errors, like network issues or non-2xx responses from the AI service
+        print(f"Error proxying request to AI service: {e}")
+        # Try to return the error from the AI service if possible, otherwise a generic error
+        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service"}
+        status_code = e.response.status_code if e.response else 503
+        return jsonify(error_body), status_code
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
+@app.route('/api/apps/assignments', methods=['GET'])
+def get_app_assignments():
+    compute_unit_ip = request.args.get('compute_unit_ip')
+    streamer_uuid = request.args.get('streamer_uuid')
+
+    if not compute_unit_ip:
+        return jsonify({"error": "compute_unit_ip is required"}), 400
+
+    try:
+        # The endpoint on the actual AI service
+        ai_service_endpoint = f"{AI_SERVICE_URL}/apps/assignments"
+        
+        params = {
+            'compute_unit_ip': compute_unit_ip,
+            'streamer_uuid': streamer_uuid
+        }
+        
+        # Make a GET request to the AI service
+        response = requests.get(ai_service_endpoint, params=params)
+        response.raise_for_status() # Raise an exception for bad status codes
+        
+        # Forward the JSON response
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error proxying request to AI service for assignments: {e}")
+        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for assignments"}
+        status_code = e.response.status_code if e.response else 503
+        return jsonify(error_body), status_code
+    except Exception as e:
+        print(f"An unexpected error occurred in get_app_assignments: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
+@app.route('/api/streamers', methods=['GET'])
+def get_streamers():
+    try:
+        # The endpoint on the actual AI service
+        ai_service_endpoint = f"{AI_SERVICE_URL}/streamers"
+        
+        # Make a GET request to the AI service
+        response = requests.get(ai_service_endpoint)
+        response.raise_for_status() # Raise an exception for bad status codes
+        
+        # Forward the JSON response
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error proxying request to AI service for streamers: {e}")
+        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for streamers"}
+        status_code = e.response.status_code if e.response else 503
+        return jsonify(error_body), status_code
+    except Exception as e:
+        print(f"An unexpected error occurred in get_streamers: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
+@app.route('/api/streamers/configs', methods=['GET'])
+def get_streamer_configs():
+    streamer_uuid = request.args.get('streamer_uuid')
+    if not streamer_uuid:
+        return jsonify({"error": "streamer_uuid is required"}), 400
+        
+    try:
+        # The endpoint on the actual AI service
+        ai_service_endpoint = f"{AI_SERVICE_URL}/streamers/configs"
+        
+        params = {'streamer_uuid': streamer_uuid}
+        
+        # Make a GET request to the AI service
+        response = requests.get(ai_service_endpoint, params=params)
+        response.raise_for_status() # Raise an exception for bad status codes
+        
+        # Forward the JSON response
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error proxying request to AI service for streamer configs: {e}")
+        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for streamer configs"}
+        status_code = e.response.status_code if e.response else 503
+        return jsonify(error_body), status_code
+    except Exception as e:
+        print(f"An unexpected error occurred in get_streamer_configs: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
+@app.route('/api/apps', methods=['GET'])
+def get_apps():
+    try:
+        # The endpoint on the actual AI service
+        ai_service_endpoint = f"{AI_SERVICE_URL}/apps"
+        
+        # Make a GET request to the AI service
+        response = requests.get(ai_service_endpoint)
+        response.raise_for_status() # Raise an exception for bad status codes
+        
+        # Forward the JSON response
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error proxying request to AI service for apps: {e}")
+        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for apps"}
+        status_code = e.response.status_code if e.response else 503
+        return jsonify(error_body), status_code
+    except Exception as e:
+        print(f"An unexpected error occurred in get_apps: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
 if __name__ == '__main__':
-    # Create tables
+    # Create database tables
     create_tables()
     
-    # Start device monitoring in background
+    # Start device monitoring in background thread
     monitor_thread = threading.Thread(target=monitor_devices, daemon=True)
     monitor_thread.start()
     
-    # Run the app
-    app.run(debug=True, host='0.0.0.0', port=8001)
+    # Run Flask app
+    app.run(
+        host='0.0.0.0',  # Allow external connections
+        port=8001,       # Use port 8001 to match frontend expectations
+        debug=True       # Enable debug mode for development
+    )
