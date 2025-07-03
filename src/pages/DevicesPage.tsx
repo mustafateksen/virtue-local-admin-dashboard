@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Cpu, Plus, RefreshCw, CheckCircle, X, Settings, Wifi, WifiOff, Trash2, Star, StarOff } from 'lucide-react';
+import { Camera, Cpu, Plus, RefreshCw, CheckCircle, X, Settings, Wifi, WifiOff, Trash2, Star, StarOff, Edit3 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import type { FavoriteStreamer } from '../contexts/FavoritesContext';
@@ -263,9 +263,34 @@ const convertAIStreamerToCamera = (aiStreamer: any): Camera => {
   };
 };
 
+// Update streamer name via backend API
+const updateStreamerName = async (computeUnitIP: string, streamerData: Camera, newName: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/streamers/update_name`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        compute_unit_ip: computeUnitIP,
+        streamer_uuid: streamerData.streamerUuid,
+        streamer_type_uuid: streamerData.streamerTypeUuid,
+        streamer_hr_name: newName,
+        config_template_name: streamerData.configTemplateName,
+        is_alive: streamerData.status === 'online' ? '1' : '0'
+      }),
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to update streamer name:', error);
+    return false;
+  }
+};
+
 export const DevicesPage: React.FC = () => {
   const { theme } = useTheme();
-  const { addToFavorites, removeFromFavorites, isFavorite } = useFavorites();
+  const { addToFavorites, removeFromFavorites, updateFavorite, isFavorite } = useFavorites();
   
   // Cameras come from AI system and localStorage, Compute Units from backend
   // Start with empty cameras array, they will be loaded after compute units are fetched
@@ -279,6 +304,11 @@ export const DevicesPage: React.FC = () => {
   const [addDeviceError, setAddDeviceError] = useState<string>('');
   const [isAddingDevice, setIsAddingDevice] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  
+  // Editing states
+  const [editingStreamerId, setEditingStreamerId] = useState<string | null>(null);
+  const [editingStreamerName, setEditingStreamerName] = useState<string>('');
+  const [isSavingName, setIsSavingName] = useState(false);
 
   // Polling interval for real-time sync (check every 10 seconds)
   useEffect(() => {
@@ -740,6 +770,65 @@ export const DevicesPage: React.FC = () => {
     }
   };
 
+  // Handle editing streamer names
+  const handleStartEditingName = (camera: Camera) => {
+    setEditingStreamerId(camera.streamerUuid);
+    setEditingStreamerName(camera.name);
+  };
+
+  const handleCancelEditing = () => {
+    setEditingStreamerId(null);
+    setEditingStreamerName('');
+    setIsSavingName(false);
+  };
+
+  const handleSaveStreamerName = async (camera: Camera) => {
+    if (!editingStreamerName.trim() || editingStreamerName === camera.name) {
+      handleCancelEditing();
+      return;
+    }
+
+    setIsSavingName(true);
+    
+    try {
+      const success = await updateStreamerName(camera.computeUnitIP, camera, editingStreamerName.trim());
+      
+      if (success) {
+        // Update local state
+        setCameras(prev => prev.map(cam => 
+          cam.streamerUuid === camera.streamerUuid 
+            ? { ...cam, name: editingStreamerName.trim() }
+            : cam
+        ));
+        
+        // Update favorites context if this camera is a favorite
+        if (isFavorite(camera.streamerUuid)) {
+          updateFavorite(camera.streamerUuid, { 
+            streamerHrName: editingStreamerName.trim() 
+          });
+        }
+        
+        console.log(`Streamer name updated: ${camera.name} -> ${editingStreamerName.trim()}`);
+        handleCancelEditing();
+      } else {
+        console.error('Failed to update streamer name');
+        // Could add a toast notification here
+      }
+    } catch (error) {
+      console.error('Error updating streamer name:', error);
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, camera: Camera) => {
+    if (e.key === 'Enter') {
+      handleSaveStreamerName(camera);
+    } else if (e.key === 'Escape') {
+      handleCancelEditing();
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'online': return theme === 'dark' ? 'text-green-400' : 'text-green-600';
@@ -932,7 +1021,36 @@ export const DevicesPage: React.FC = () => {
                     <Camera className={`w-8 h-8 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
                   </div>
                   <div>
-                    <h3 className="text-lg lg:text-xl font-semibold text-foreground">{camera.name}</h3>
+                    <div className="flex items-center gap-2">
+                      {editingStreamerId === camera.streamerUuid ? (
+                        <input
+                          type="text"
+                          value={editingStreamerName}
+                          onChange={(e) => setEditingStreamerName(e.target.value)}
+                          onBlur={() => handleSaveStreamerName(camera)}
+                          onKeyDown={(e) => handleKeyDown(e, camera)}
+                          className={`text-lg lg:text-xl font-semibold bg-transparent border-none outline-none focus:ring-0 p-0 m-0 text-foreground ${
+                            isSavingName ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          style={{ minWidth: '200px' }}
+                          autoFocus
+                          disabled={isSavingName}
+                        />
+                      ) : (
+                        <>
+                          <h3 className="text-lg lg:text-xl font-semibold text-foreground">{camera.name}</h3>
+                          <button
+                            onClick={() => handleStartEditingName(camera)}
+                            className={`p-1 rounded hover:bg-accent transition-colors opacity-60 hover:opacity-100 ${
+                              theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                            title="Edit streamer name"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                     <p className="text-sm lg:text-base text-muted-foreground font-mono">{camera.computeUnitIP}</p>
                     <p className="text-xs text-muted-foreground">UUID: {camera.streamerUuid}</p>
                     <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">

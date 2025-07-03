@@ -36,6 +36,7 @@ interface FavoritesContextType {
   favoriteStreamers: FavoriteStreamer[];
   addToFavorites: (streamer: FavoriteStreamer) => void;
   removeFromFavorites: (streamerUuid: string) => void;
+  updateFavorite: (streamerUuid: string, updates: Partial<FavoriteStreamer>) => void;
   isFavorite: (streamerUuid: string) => boolean;
   clearFavorites: () => void;
 }
@@ -198,12 +199,25 @@ export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
+  const updateFavorite = (streamerUuid: string, updates: Partial<FavoriteStreamer>) => {
+    setFavoriteStreamers(prev => 
+      prev.map(fav => 
+        fav.streamerUuid === streamerUuid 
+          ? { ...fav, ...updates }
+          : fav
+      )
+    );
+    
+    console.log(`Updated favorite streamer ${streamerUuid}:`, updates);
+  };
+
   return (
     <FavoritesContext.Provider
       value={{
         favoriteStreamers,
         addToFavorites,
         removeFromFavorites,
+        updateFavorite,
         isFavorite,
         clearFavorites,
       }}

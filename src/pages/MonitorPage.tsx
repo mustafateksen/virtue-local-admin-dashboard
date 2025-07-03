@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CircleAlert, CircleCheck, Cctv, X, Play, Square, Settings, Star, FileText, Brain, ScanLine, BarChart3 } from 'lucide-react';
+import { Cctv, X, Play, Square, Settings, Star, FileText, Brain, ScanLine, BarChart3 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { ManageFavoritesModal } from '../components/ManageFavoritesModal';

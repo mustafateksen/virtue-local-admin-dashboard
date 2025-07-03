@@ -1364,7 +1364,7 @@ def get_last_frame():
         
         # Build the correct endpoint URL using the compute unit's IP
         if ':' in compute_unit_ip:
-            ai_service_endpoint = f"http://{compute_unit_ip}/streamers/public/get_streamer_last_frame"
+            ai_service_endpoint = f"http://compute_unit_ip/streamers/public/get_streamer_last_frame"
         else:
             ai_service_endpoint = f"http://{compute_unit_ip}:8000/streamers/public/get_streamer_last_frame"
         
@@ -1463,6 +1463,65 @@ def get_apps():
     except Exception as e:
         print(f"An unexpected error occurred in get_apps: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
+
+
+@app.route('/api/streamers/update_name', methods=['PUT'])
+def update_streamer_name():
+    """
+    Update streamer name by proxying to the AI service
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        # Required fields
+        required_fields = ['compute_unit_ip', 'streamer_uuid', 'streamer_type_uuid', 'streamer_hr_name', 'config_template_name', 'is_alive']
+        
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        compute_unit_ip = data['compute_unit_ip']
+        
+        # Prepare data for AI service
+        ai_service_data = {
+            "manuel_timestamp": datetime.datetime.now().isoformat(),
+            "streamer_uuid": data['streamer_uuid'],
+            "streamer_type_uuid": data['streamer_type_uuid'],
+            "streamer_hr_name": data['streamer_hr_name'],
+            "config_template_name": data['config_template_name'],
+            "is_alive": data['is_alive']
+        }
+        
+        # Make request to AI service
+        # Handle compute unit IP - remove port if it exists, then add :8000
+        base_ip = compute_unit_ip.split(':')[0] if ':' in compute_unit_ip else compute_unit_ip
+        ai_service_endpoint = f"http://{base_ip}:8000/streamers/private/update_streamer_info"
+        
+        logger.info(f"Updating streamer name via AI service: {ai_service_endpoint}")
+        logger.info(f"Request data: {ai_service_data}")
+        
+        response = requests.put(ai_service_endpoint, json=ai_service_data, timeout=10)
+        response.raise_for_status()
+        
+        logger.info(f"Streamer name updated successfully: {data['streamer_hr_name']}")
+        
+        return jsonify({
+            'message': 'Streamer name updated successfully',
+            'streamer_uuid': data['streamer_uuid'],
+            'new_name': data['streamer_hr_name']
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Failed to update streamer name via AI service: {e}"
+        logger.error(error_msg)
+        return jsonify({'error': error_msg}), 503
+    except Exception as e:
+        error_msg = f"Error updating streamer name: {e}"
+        logger.error(error_msg)
+        return jsonify({'error': error_msg}), 500
 
 
 if __name__ == '__main__':
