@@ -18,6 +18,7 @@ interface StreamerData {
   config_template_name: string;
   is_alive: string | number | boolean;
   compute_unit_ip?: string;
+  ip_address?: string;
 }
 
 interface ManageFavoritesModalProps {
@@ -142,15 +143,17 @@ export const ManageFavoritesModal: React.FC<ManageFavoritesModalProps> = ({ isOp
   }, [computeUnits]);
 
   const handleToggleFavorite = (streamer: StreamerData) => {
+    // The full streamer object is now the favorite
     const favoriteStreamer: FavoriteStreamer = {
-      id: `${streamer.compute_unit_ip}-${streamer.streamer_uuid}`,
-      streamerUuid: streamer.streamer_uuid,
-      streamerHrName: streamer.streamer_hr_name,
-      streamerType: streamer.streamer_type,
-      configTemplateName: streamer.config_template_name,
-      computeUnitIP: streamer.compute_unit_ip || '',
-      isAlive: isStreamerAlive(streamer) ? 'true' : 'false',
-      addedAt: new Date().toISOString()
+        id: streamer.streamer_uuid, // Use uuid as the primary id
+        streamerUuid: streamer.streamer_uuid,
+        streamerHrName: streamer.streamer_hr_name || 'Unknown Camera',
+        streamerType: streamer.streamer_type || 'camera',
+        configTemplateName: streamer.config_template_name || 'default',
+        computeUnitIP: streamer.compute_unit_ip || 'N/A',
+        isAlive: isStreamerAlive(streamer) ? 'true' : 'false',
+        ipAddress: streamer.ip_address,
+        addedAt: new Date().toISOString(),
     };
 
     if (isFavorite(streamer.streamer_uuid)) {

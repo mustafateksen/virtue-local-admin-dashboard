@@ -185,7 +185,7 @@ export const MonitorPage: React.FC = () => {
       
       const statusInterval = setInterval(updateStatuses, 5000); // Update every 5 seconds
       const assignmentInterval = setInterval(updateAssignments, 30000); // Update every 30 seconds
-      const frameInterval = setInterval(updateFrames, 15000); // Update every 15 seconds
+      const frameInterval = setInterval(updateFrames, 8000); // Update every 8 seconds
       
       return () => {
         clearInterval(statusInterval);

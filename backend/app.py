@@ -13,6 +13,8 @@ import datetime
 import json
 import time
 import threading
+import subprocess
+import random
 import requests # Add requests for proxying
 from typing import Dict, List, Optional
 import logging
@@ -153,6 +155,36 @@ class ComputeUnit(db.Model):
             'ipAddress': self.ip_address,
             'status': self.status,
             'lastSeen': self.last_seen.strftime('%Y-%m-%d %H:%M:%S') if self.last_seen else None,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class FavoriteStreamer(db.Model):
+    __tablename__ = 'favorite_streamers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    streamer_uuid = db.Column(db.String(100), unique=True, nullable=False)
+    streamer_hr_name = db.Column(db.String(100), nullable=False)
+    streamer_type = db.Column(db.String(50), nullable=False)
+    config_template_name = db.Column(db.String(100), nullable=False)
+    compute_unit_ip = db.Column(db.String(50), nullable=False)
+    is_alive = db.Column(db.String(10), default='false')
+    ip_address = db.Column(db.String(50), nullable=True)
+    added_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'streamerUuid': self.streamer_uuid,
+            'streamerHrName': self.streamer_hr_name,
+            'streamerType': self.streamer_type,
+            'configTemplateName': self.config_template_name,
+            'computeUnitIP': self.compute_unit_ip,
+            'isAlive': self.is_alive,
+            'ipAddress': self.ip_address,
+            'addedAt': self.added_at.isoformat() if self.added_at else None,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -1041,7 +1073,7 @@ class StreamerAppAssignmentUpdateResource(Resource):
                 
             try:
                 logger.info(f"Updating app assignment at: {ai_url}")
-                response = requests.put(ai_url, json=data, timeout=10)
+                response = requests.put(ai_service_endpoint, json=data, timeout=10)
                 
                 if response.status_code == 200:
                     ai_data = response.json()
@@ -1125,6 +1157,83 @@ class StreamerAppAssignmentDeleteResource(Resource):
         """Handle CORS preflight for app assignment delete endpoint"""
         return {}, 200
 
+# Favorites Management Resources
+class FavoriteStreamersResource(Resource):
+    def get(self):
+        """Get all favorite streamers"""
+        try:
+            favorites = FavoriteStreamer.query.order_by(FavoriteStreamer.added_at.desc()).all()
+            return [favorite.to_dict() for favorite in favorites], 200
+        except Exception as e:
+            logger.error(f"Error getting favorite streamers: {e}")
+            return {'message': 'Failed to get favorite streamers'}, 500
+    
+    def post(self):
+        """Add a streamer to favorites"""
+        try:
+            data = request.get_json()
+            
+            # Validate required fields
+            required_fields = ['streamerUuid', 'streamerHrName', 'streamerType', 'configTemplateName', 'computeUnitIP']
+            for field in required_fields:
+                if not data.get(field):
+                    return {'message': f'{field} is required'}, 400
+            
+            # Check if already exists
+            existing = FavoriteStreamer.query.filter_by(streamer_uuid=data['streamerUuid']).first()
+            if existing:
+                return {'message': 'Streamer already in favorites'}, 409
+            
+            # Create new favorite
+            favorite = FavoriteStreamer(
+                streamer_uuid=data['streamerUuid'],
+                streamer_hr_name=data['streamerHrName'],
+                streamer_type=data['streamerType'],
+                config_template_name=data['configTemplateName'],
+                compute_unit_ip=data['computeUnitIP'],
+                is_alive=data.get('isAlive', 'false'),
+                ip_address=data.get('ipAddress')
+            )
+            
+            db.session.add(favorite)
+            db.session.commit()
+            
+            logger.info(f"Added streamer to favorites: {data['streamerHrName']}")
+            return favorite.to_dict(), 201
+            
+        except Exception as e:
+            logger.error(f"Error adding favorite streamer: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to add to favorites'}, 500
+    
+    def options(self):
+        """Handle CORS preflight for favorites endpoint"""
+        return {}, 200
+
+class FavoriteStreamerResource(Resource):
+    def delete(self, streamer_uuid):
+        """Remove a streamer from favorites"""
+        try:
+            favorite = FavoriteStreamer.query.filter_by(streamer_uuid=streamer_uuid).first()
+            if not favorite:
+                return {'message': 'Streamer not found in favorites'}, 404
+            
+            streamer_name = favorite.streamer_hr_name
+            db.session.delete(favorite)
+            db.session.commit()
+            
+            logger.info(f"Removed streamer from favorites: {streamer_name}")
+            return {'message': 'Removed from favorites successfully'}, 200
+            
+        except Exception as e:
+            logger.error(f"Error removing favorite streamer: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to remove from favorites'}, 500
+    
+    def options(self, streamer_uuid):
+        """Handle CORS preflight for favorite streamer endpoint"""
+        return {}, 200
+
 # Register API endpoints
 api.add_resource(AuthCheckResource, '/api/auth/check-registration')
 api.add_resource(RegisterResource, '/api/auth/register')
@@ -1145,6 +1254,8 @@ api.add_resource(SupportedAppsResource, '/api/apps/supported')
 api.add_resource(StreamerAppAssignmentsResource, '/api/apps/assignments')
 api.add_resource(StreamerAppAssignmentUpdateResource, '/api/apps/assignments/update')
 api.add_resource(StreamerAppAssignmentDeleteResource, '/api/apps/assignments/delete')
+api.add_resource(FavoriteStreamersResource, '/api/favorites')
+api.add_resource(FavoriteStreamerResource, '/api/favorites/<string:streamer_uuid>')
 
 # Error handlers
 @app.errorhandler(404)
@@ -1216,94 +1327,90 @@ def create_tables():
 def health_check():
     return {'status': 'healthy', 'timestamp': datetime.datetime.utcnow().isoformat()}
 
+@app.route('/api/ai_service/health', methods=['GET'])
+def ai_service_health():
+    """
+    Checks the health of the AI service.
+    """
+    try:
+        response = requests.get(f"{AI_SERVICE_URL}/health", timeout=5)
+        response.raise_for_status()
+        return jsonify(response.json()), response.status_code
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "AI service timed out"}), 504
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": f"Could not connect to AI service at {AI_SERVICE_URL}"}), 503
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 502
+
+
 # New route to fetch the last frame from the AI service
 @app.route('/api/streamers/last_frame', methods=['POST'])
-def get_streamer_last_frame_proxy():
+def get_last_frame():
     data = request.get_json()
     streamer_uuid = data.get('streamer_uuid')
-
     if not streamer_uuid:
         return jsonify({"error": "streamer_uuid is required"}), 400
-
+        
     try:
-        # The endpoint on the actual AI service
-        ai_service_endpoint = f"{AI_SERVICE_URL}/streamers/public/get_streamer_last_frame"
+        # Find the streamer's compute unit IP from favorites table
+        favorite_streamer = FavoriteStreamer.query.filter_by(streamer_uuid=streamer_uuid).first()
         
-        response = requests.post(ai_service_endpoint, json={"streamer_uuid": streamer_uuid})
+        if not favorite_streamer:
+            logger.error(f"Streamer {streamer_uuid} not found in favorites")
+            return jsonify({"error": "Streamer not found in favorites"}), 404
         
-        # Check if the request to the AI service was successful
+        compute_unit_ip = favorite_streamer.compute_unit_ip
+        
+        # Build the correct endpoint URL using the compute unit's IP
+        if ':' in compute_unit_ip:
+            ai_service_endpoint = f"http://{compute_unit_ip}/streamers/public/get_streamer_last_frame"
+        else:
+            ai_service_endpoint = f"http://{compute_unit_ip}:8000/streamers/public/get_streamer_last_frame"
+        
+        logger.info(f"Fetching last frame for {streamer_uuid} from {ai_service_endpoint}")
+        
+        # Make a POST request to the AI service with the correct payload
+        response = requests.post(ai_service_endpoint, json={"streamer_uuid": streamer_uuid}, timeout=10)
         response.raise_for_status()
         
-        # Forward the JSON response from the AI service to the client
+        # Forward the JSON response from the AI service
         return jsonify(response.json())
 
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout connecting to compute unit {compute_unit_ip} for last_frame of {streamer_uuid}")
+        return jsonify({"error": "Compute unit timed out"}), 504
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Connection error to compute unit {compute_unit_ip} for last_frame of {streamer_uuid}")
+        return jsonify({"error": "Could not connect to compute unit"}), 503
     except requests.exceptions.RequestException as e:
-        # Handle potential errors, like network issues or non-2xx responses from the AI service
-        print(f"Error proxying request to AI service: {e}")
-        # Try to return the error from the AI service if possible, otherwise a generic error
-        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service"}
-        status_code = e.response.status_code if e.response else 503
+        logger.error(f"Error proxying last_frame request for {streamer_uuid} to compute unit {compute_unit_ip}: {e}")
+        # Try to return the error from the AI service response if possible
+        error_body = {"error": "Failed to get last frame from compute unit"}
+        status_code = 502
+        if e.response is not None:
+            try:
+                error_body = e.response.json()
+                status_code = e.response.status_code
+            except json.JSONDecodeError:
+                error_body = {"error": e.response.text}
         return jsonify(error_body), status_code
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return jsonify({"error": "An internal server error occurred"}), 500
-
-
-@app.route('/api/apps/assignments', methods=['GET'])
-def get_app_assignments():
-    compute_unit_ip = request.args.get('compute_unit_ip')
-    streamer_uuid = request.args.get('streamer_uuid')
-
-    if not compute_unit_ip:
-        return jsonify({"error": "compute_unit_ip is required"}), 400
-
-    try:
-        # The endpoint on the actual AI service
-        ai_service_endpoint = f"{AI_SERVICE_URL}/apps/assignments"
-        
-        params = {
-            'compute_unit_ip': compute_unit_ip,
-            'streamer_uuid': streamer_uuid
-        }
-        
-        # Make a GET request to the AI service
-        response = requests.get(ai_service_endpoint, params=params)
-        response.raise_for_status() # Raise an exception for bad status codes
-        
-        # Forward the JSON response
-        return jsonify(response.json())
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error proxying request to AI service for assignments: {e}")
-        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for assignments"}
-        status_code = e.response.status_code if e.response else 503
-        return jsonify(error_body), status_code
-    except Exception as e:
-        print(f"An unexpected error occurred in get_app_assignments: {e}")
+        logger.error(f"An unexpected error occurred in get_last_frame for {streamer_uuid}: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
 
 @app.route('/api/streamers', methods=['GET'])
-def get_streamers():
+def get_all_streamers():
+    """Get all streamers from the database"""
     try:
-        # The endpoint on the actual AI service
-        ai_service_endpoint = f"{AI_SERVICE_URL}/streamers"
-        
-        # Make a GET request to the AI service
-        response = requests.get(ai_service_endpoint)
-        response.raise_for_status() # Raise an exception for bad status codes
-        
-        # Forward the JSON response
-        return jsonify(response.json())
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error proxying request to AI service for streamers: {e}")
-        error_body = e.response.json() if e.response else {"error": "Failed to connect to AI service for streamers"}
-        status_code = e.response.status_code if e.response else 503
-        return jsonify(error_body), status_code
+        streamers = Streamer.query.all()
+        return jsonify({
+            'streamers': [streamer.to_dict() for streamer in streamers]
+        }), 200
     except Exception as e:
-        print(f"An unexpected error occurred in get_streamers: {e}")
-        return jsonify({"error": "An internal server error occurred"}), 500
+        logger.error(f"Error getting all streamers: {e}")
+        return jsonify({'error': 'Failed to get streamers'}), 500
 
 
 @app.route('/api/streamers/configs', methods=['GET'])
