@@ -330,7 +330,7 @@ export const DashboardPage: React.FC = () => {
               className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
               <Monitor className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>System Monitor</span>
+              <span>Monitor Streamers</span>
             </button>
             <button 
               onClick={() => navigate('/logs')}

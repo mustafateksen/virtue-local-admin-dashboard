@@ -28,7 +28,7 @@ interface SidebarProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, type: 'link' },
-  { name: 'System Monitor', href: '/monitor', icon: Monitor, type: 'link' },
+  { name: 'Monitor Streamers', href: '/monitor', icon: Monitor, type: 'link' },
   { name: 'Logs', href: '/logs', icon: FileWarning, type: 'link' },
   { name: 'All Devices', href: '/devices', icon: Cpu, type: 'link' },
   { name: 'Apps', href: '/apps', icon: Package, type: 'link' },
