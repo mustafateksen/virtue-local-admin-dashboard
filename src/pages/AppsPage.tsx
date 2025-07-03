@@ -890,7 +890,7 @@ export const AppsPage: React.FC = () => {
         return theme === 'dark' ? 'text-green-400' : 'text-green-800';
       case 'inactive':
       case 'offline':
-        return 'text-muted-foreground';
+        return theme === 'dark' ? 'text-red-400' : 'text-red-800';
       case 'error':
         return theme === 'dark' ? 'text-red-400' : 'text-red-800';
       default:
@@ -905,7 +905,7 @@ export const AppsPage: React.FC = () => {
         return theme === 'dark' ? 'bg-green-900/50' : 'bg-green-100';
       case 'inactive':
       case 'offline':
-        return 'bg-muted';
+        return theme === 'dark' ? 'bg-red-900/50' : 'bg-red-100';
       case 'error':
         return theme === 'dark' ? 'bg-red-900/50' : 'bg-red-100';
       default:
