@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
 // Get dynamic API base URL based on current window location
@@ -39,6 +39,7 @@ interface FavoritesContextType {
   updateFavorite: (streamerUuid: string, updates: Partial<FavoriteStreamer>) => void;
   isFavorite: (streamerUuid: string) => boolean;
   clearFavorites: () => void;
+  refreshFavorites: () => Promise<void>;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
@@ -92,124 +93,62 @@ const removeFavoriteFromBackend = async (streamerUuid: string): Promise<boolean>
   }
 };
 
-const FAVORITES_STORAGE_KEY = 'virtue-favorite-streamers';
-
 export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [favoriteStreamers, setFavoriteStreamers] = useState<FavoriteStreamer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Load favorites from backend on mount
+  // Load favorites from backend on initial load
   useEffect(() => {
     const loadFavorites = async () => {
-      setIsLoading(true);
-      try {
-        const backendFavorites = await fetchFavorites();
-        setFavoriteStreamers(backendFavorites);
-      } catch (error) {
-        console.error('Failed to load favorites from backend:', error);
-        // Fallback to localStorage
-        const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            setFavoriteStreamers(parsed);
-          } catch (parseError) {
-            console.error('Failed to parse favorite streamers from localStorage:', parseError);
-            localStorage.removeItem(FAVORITES_STORAGE_KEY);
-          }
-        }
-      } finally {
-        setIsLoading(false);
-      }
+      const backendFavorites = await fetchFavorites();
+      setFavoriteStreamers(backendFavorites);
     };
 
     loadFavorites();
   }, []);
 
-  // Sync with backend periodically (every 30 seconds)
-  useEffect(() => {
-    const syncInterval = setInterval(async () => {
-      try {
-        const backendFavorites = await fetchFavorites();
-        setFavoriteStreamers(backendFavorites);
-      } catch (error) {
-        console.error('Failed to sync favorites with backend:', error);
-      }
-    }, 30000);
-
-    return () => clearInterval(syncInterval);
+  const addToFavorites = useCallback(async (streamer: FavoriteStreamer) => {
+    const success = await addFavoriteToBackend(streamer);
+    if (success) {
+      setFavoriteStreamers((prev) => [...prev, streamer]);
+    } else {
+      console.error('Failed to add favorite to backend.');
+    }
   }, []);
 
-  // Save to localStorage whenever favorites change (backup)
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteStreamers));
-    }
-  }, [favoriteStreamers, isLoading]);
-
-  const addToFavorites = async (streamer: FavoriteStreamer) => {
-    // Check if already exists
-    if (favoriteStreamers.some(fav => fav.streamerUuid === streamer.streamerUuid)) {
-      return;
-    }
-
-    // Optimistically update UI
-    const newStreamer = { ...streamer, addedAt: new Date().toISOString() };
-    setFavoriteStreamers(prev => [...prev, newStreamer]);
-
-    // Sync with backend
-    const success = await addFavoriteToBackend(newStreamer);
-    if (!success) {
-      // Revert if backend sync failed
-      setFavoriteStreamers(prev => prev.filter(fav => fav.streamerUuid !== streamer.streamerUuid));
-      console.error('Failed to add favorite to backend');
-    }
-  };
-
-  const removeFromFavorites = async (streamerUuid: string) => {
-    // Optimistically update UI
-    const originalFavorites = [...favoriteStreamers];
-    setFavoriteStreamers(prev => prev.filter(fav => fav.streamerUuid !== streamerUuid));
-
-    // Sync with backend
+  const removeFromFavorites = useCallback(async (streamerUuid: string) => {
     const success = await removeFavoriteFromBackend(streamerUuid);
-    if (!success) {
-      // Revert if backend sync failed
-      setFavoriteStreamers(originalFavorites);
-      console.error('Failed to remove favorite from backend');
+    if (success) {
+      setFavoriteStreamers((prev) => prev.filter((s) => s.streamerUuid !== streamerUuid));
+    } else {
+      console.error('Failed to remove favorite from backend.');
     }
-  };
+  }, []);
 
-  const isFavorite = (streamerUuid: string): boolean => {
-    return favoriteStreamers.some(fav => fav.streamerUuid === streamerUuid);
-  };
-
-  const clearFavorites = async () => {
-    const originalFavorites = [...favoriteStreamers];
-    setFavoriteStreamers([]);
-
-    // Remove all from backend
-    try {
-      const deletePromises = originalFavorites.map(fav => removeFavoriteFromBackend(fav.streamerUuid));
-      await Promise.all(deletePromises);
-    } catch (error) {
-      // Revert if backend sync failed
-      setFavoriteStreamers(originalFavorites);
-      console.error('Failed to clear favorites from backend');
-    }
-  };
-
-  const updateFavorite = (streamerUuid: string, updates: Partial<FavoriteStreamer>) => {
+  const updateFavorite = useCallback(async (streamerUuid: string, updates: Partial<FavoriteStreamer>) => {
+    // This is a placeholder. In a real app, you would also update the backend.
     setFavoriteStreamers(prev => 
-      prev.map(fav => 
-        fav.streamerUuid === streamerUuid 
-          ? { ...fav, ...updates }
-          : fav
-      )
+      prev.map(s => s.streamerUuid === streamerUuid ? { ...s, ...updates } : s)
     );
-    
-    console.log(`Updated favorite streamer ${streamerUuid}:`, updates);
-  };
+  }, []);
+
+  const clearFavorites = useCallback(() => {
+    // This is a placeholder. In a real app, you would also clear the backend.
+    setFavoriteStreamers([]);
+  }, []);
+
+  const isFavorite = useCallback(
+    (streamerUuid: string) => {
+      return favoriteStreamers.some((s) => s.streamerUuid === streamerUuid);
+    },
+    [favoriteStreamers]
+  );
+
+  // This function is not strictly needed if we trust the backend as the source of truth,
+  // but can be useful for manual refresh actions.
+  const refreshFavorites = useCallback(async () => {
+    const backendFavorites = await fetchFavorites();
+    setFavoriteStreamers(backendFavorites);
+  }, []);
 
   return (
     <FavoritesContext.Provider
@@ -220,6 +159,7 @@ export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children 
         updateFavorite,
         isFavorite,
         clearFavorites,
+        refreshFavorites, // Expose refresh function
       }}
     >
       {children}
@@ -227,7 +167,7 @@ export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 };
 
-export const useFavorites = (): FavoritesContextType => {
+export const useFavorites = () => {
   const context = useContext(FavoritesContext);
   if (context === undefined) {
     throw new Error('useFavorites must be used within a FavoritesProvider');

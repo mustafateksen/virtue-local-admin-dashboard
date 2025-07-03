@@ -41,16 +41,6 @@ interface AppAssignmentsResponse {
   assignments: AppAssignment[];
 }
 
-interface LastFrameResponse {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  manuel_timestamp: string;
-  streamer_uuid: string;
-  frame_uuid: string;
-  base64_jpeg: string;
-}
-
 // Fetch app assignments for a specific streamer
 const fetchAppAssignments = async (computeUnitIP: string, streamerUuid: string): Promise<AppAssignment[]> => {
   try {
@@ -76,7 +66,7 @@ const fetchAppAssignments = async (computeUnitIP: string, streamerUuid: string):
 };
 
 // Fetch last frame for a specific streamer
-const fetchLastFrame = async (streamerUuid: string): Promise<string | null> => {
+const fetchLastFrame = async (computeUnitIP: string, streamerUuid: string): Promise<string | null> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/streamers/last_frame`, {
       method: 'POST',
@@ -84,16 +74,24 @@ const fetchLastFrame = async (streamerUuid: string): Promise<string | null> => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        streamer_uuid: streamerUuid
+        streamer_uuid: streamerUuid,
+        compute_unit_ip: computeUnitIP
       }),
     });
     
     if (response.ok) {
-      const data: LastFrameResponse = await response.json();
+      const data = await response.json();
+      console.log(`🖼️ Last frame response for ${streamerUuid}:`, data);
+      
+      // Handle different response formats
       if (data.base64_jpeg) {
         // Convert base64 to data URL for display
         return `data:image/jpeg;base64,${data.base64_jpeg}`;
+      } else if (data.payload && data.payload.base64_jpeg) {
+        return `data:image/jpeg;base64,${data.payload.base64_jpeg}`;
       }
+    } else {
+      console.error(`❌ HTTP Error ${response.status} fetching last frame for ${streamerUuid}`);
     }
     return null;
   } catch (error) {
@@ -104,7 +102,7 @@ const fetchLastFrame = async (streamerUuid: string): Promise<string | null> => {
 
 export const MonitorPage: React.FC = () => {
   const { theme } = useTheme();
-  const { favoriteStreamers } = useFavorites();
+  const { favoriteStreamers, refreshFavorites } = useFavorites(); // Add refreshFavorites
   const [learning, setLearning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -113,6 +111,15 @@ export const MonitorPage: React.FC = () => {
   const [streamerStatuses, setStreamerStatuses] = useState<Record<string, any>>({});
   const [streamerAssignments, setStreamerAssignments] = useState<Record<string, AppAssignment[]>>({});
   const [streamerFrames, setStreamerFrames] = useState<Record<string, string>>({});
+  const [liveStreamers, setLiveStreamers] = useState<any[]>([]); // Fresh data directly from AI services
+
+  // Mark context as loaded after a short delay to ensure it's properly initialized
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Context loaded - this was used for debugging
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLearningClick = () => {
     setLoading(true);
@@ -134,17 +141,80 @@ export const MonitorPage: React.FC = () => {
     setModalImg(null);
   };
 
+  // Fetch all streamers from AI service and merge with favorites
+  const fetchAllStreamersFromAI = async () => {
+    // Debug: Log favorites from context
+    console.log('🎯 Favorites from context:', favoriteStreamers);
+    
+    // Get the list of favorite streamer UUIDs from the context
+    const favoriteUuids = new Set(favoriteStreamers.map((f: any) => f.streamerUuid));
+    console.log('🎯 Favorite UUIDs:', Array.from(favoriteUuids));
+    
+    if (favoriteUuids.size === 0) {
+      console.log('🎯 No favorites found, clearing live streamers');
+      setLiveStreamers([]); // Clear if no favorites
+      return;
+    }
+
+    const allLiveStreamers: any[] = [];
+    
+    // Get unique compute units from favorites to query them
+    const computeUnits = Array.from(new Set(favoriteStreamers.map((f: any) => f.computeUnitIP)));
+    
+    console.log('🔍 Fetching live data for favorites from compute units:', computeUnits);
+    
+    for (const computeUnitIP of computeUnits) {
+      try {
+        // Use backend proxy to avoid CORS issues
+        const response = await fetch(`${API_BASE_URL}/api/streamers/proxy?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`);
+        if (response.ok) {
+          const responseData = await response.json();
+          console.log(`🔍 Raw response from ${computeUnitIP}:`, responseData);
+          
+          // Extract the payload array from the response
+          const streamersFromAI = responseData.payload || responseData;
+          
+          // Ensure it's an array before filtering
+          if (!Array.isArray(streamersFromAI)) {
+            console.error(`❌ Expected array but got:`, typeof streamersFromAI, streamersFromAI);
+            continue;
+          }
+          
+          // Filter to only include streamers that are in our favorites list
+          const favoriteStreamersFromAI = streamersFromAI.filter((s: any) => favoriteUuids.has(s.streamer_uuid));
+          
+          console.log(`✅ Got ${favoriteStreamersFromAI.length} favorite streamers from ${computeUnitIP}`);
+
+          allLiveStreamers.push(...favoriteStreamersFromAI.map((s: any) => ({
+            ...s,
+            computeUnitIP, // Add computeUnitIP for later use
+            streamerUuid: s.streamer_uuid,
+            streamerHrName: s.streamer_hr_name, // Direct mapping from AI service
+            isAlive: s.is_alive === 1 || s.is_alive === '1' || s.is_alive === true // Normalize to boolean logic
+          })));
+        } else {
+          console.error(`❌ HTTP Error ${response.status} fetching streamers from ${computeUnitIP}`);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to fetch streamers from ${computeUnitIP}:`, error);
+      }
+    }
+    
+    console.log('📺 Final live streamers set:', allLiveStreamers.map((s: any) => `${s.streamerUuid}: "${s.streamerHrName}"`));
+    setLiveStreamers(allLiveStreamers);
+  };
+
   // Update streamer statuses, assignments and frames periodically
   useEffect(() => {
     const updateStatuses = async () => {
       const statuses: Record<string, any> = {};
       
-      for (const streamer of favoriteStreamers) {
+      for (const streamer of liveStreamers) {
         // TODO: BURASI API ILE BAĞLANACAK - Gerçek anomali durumu API'den gelecek
         statuses[streamer.streamerUuid] = {
           status: 'analyzing', // Default to analyzing, will be replaced with API data
           data: Array.from({ length: 10 }, () => Math.floor(Math.random() * 25) + 1),
-          isAlive: streamer.isAlive === 'true'
+          isAlive: streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1'
         };
       }
       
@@ -154,7 +224,7 @@ export const MonitorPage: React.FC = () => {
     const updateAssignments = async () => {
       const assignments: Record<string, AppAssignment[]> = {};
       
-      for (const streamer of favoriteStreamers) {
+      for (const streamer of liveStreamers) {
         const streamerAssignments = await fetchAppAssignments(streamer.computeUnitIP, streamer.streamerUuid);
         assignments[streamer.streamerUuid] = streamerAssignments;
       }
@@ -165,10 +235,11 @@ export const MonitorPage: React.FC = () => {
     const updateFrames = async () => {
       const frames: Record<string, string> = {};
       
-      for (const streamer of favoriteStreamers) {
+      for (const streamer of liveStreamers) {
         // Only fetch frames for online streamers
-        if (streamer.isAlive === 'true') {
-          const frameData = await fetchLastFrame(streamer.streamerUuid);
+        const isOnline = streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1';
+        if (isOnline) {
+          const frameData = await fetchLastFrame(streamer.computeUnitIP, streamer.streamerUuid);
           if (frameData) {
             frames[streamer.streamerUuid] = frameData;
           }
@@ -178,7 +249,8 @@ export const MonitorPage: React.FC = () => {
       setStreamerFrames(frames);
     };
 
-    if (favoriteStreamers.length > 0) {
+    if (liveStreamers.length > 0) {
+      // Initial load - run immediately
       updateStatuses();
       updateAssignments();
       updateFrames();
@@ -193,11 +265,43 @@ export const MonitorPage: React.FC = () => {
         clearInterval(frameInterval);
       };
     }
+  }, [liveStreamers]);
+
+  // Initial load and periodic refresh of streamer data
+  useEffect(() => {
+    console.log('🔄 useEffect triggered for favoriteStreamers:', favoriteStreamers.length);
+    
+    if (favoriteStreamers.length > 0) {
+      // Load immediately
+      fetchAllStreamersFromAI();
+      
+      // Refresh every 3 seconds for real-time updates
+      const refreshInterval = setInterval(fetchAllStreamersFromAI, 3000);
+      
+      return () => clearInterval(refreshInterval);
+    } else {
+      setLiveStreamers([]); // Clear live streamers if there are no favorites
+    }
+  }, [favoriteStreamers]); // Depend on the entire array, React will do shallow comparison
+
+  // Refresh when window gets focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (favoriteStreamers.length > 0) {
+        fetchAllStreamersFromAI();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [favoriteStreamers]);
 
   const getStreamerDisplayData = (streamer: any) => {
     const status = streamerStatuses[streamer.streamerUuid];
     const isAnomaly = status?.status === 'anomaly';
+    
+    // Debug: Log final display name - SHOULD SHOW UPDATED NAME
+    console.log(`📺 FINAL DISPLAY: ${streamer.streamerUuid} = "${streamer.streamerHrName}"`);
     
     return {
       ...streamer,
@@ -302,7 +406,7 @@ export const MonitorPage: React.FC = () => {
       </div>
 
       {/* Camera Grid */}
-      {favoriteStreamers.length === 0 ? (
+      {liveStreamers.length === 0 ? (
         // Empty State - No favorites
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Cctv className="w-16 h-16 text-muted-foreground/50 mb-6" />
@@ -325,9 +429,9 @@ export const MonitorPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">
-              Favorite Streamers ({favoriteStreamers.length})
+              Favorite Streamers ({liveStreamers.length})
               <span className="text-sm text-muted-foreground ml-2">
-                ({favoriteStreamers.filter(s => s.isAlive === 'true').length} online, {favoriteStreamers.filter(s => s.isAlive !== 'true').length} offline)
+                ({liveStreamers.filter((s: any) => s.isAlive === true || s.isAlive === 1 || s.isAlive === '1').length} online, {liveStreamers.filter((s: any) => !(s.isAlive === true || s.isAlive === 1 || s.isAlive === '1')).length} offline)
               </span>
             </h2>
             <button
@@ -340,9 +444,9 @@ export const MonitorPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap justify-start gap-6 lg:gap-8">
-            {favoriteStreamers.map((streamer) => {
+            {liveStreamers.map((streamer: any) => {
               const displayData = getStreamerDisplayData(streamer);
-              const isOnline = streamer.isAlive === 'true';
+              const isOnline = streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1';
               
               return (
                 <div key={streamer.streamerUuid} className="flex flex-col space-y-4 w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-1rem)] xl:w-[calc(25%-1.5rem)]">
@@ -353,7 +457,7 @@ export const MonitorPage: React.FC = () => {
                       <>
                         <img
                           src={streamerFrames[streamer.streamerUuid] || cam1image}
-                          alt={streamer.streamerHrName}
+                          alt={displayData.streamerHrName}
                           className="w-full aspect-square object-cover rounded-xl cursor-pointer shadow-lg"
                           onClick={() => { 
                             setModalImg(streamerFrames[streamer.streamerUuid] || cam1image); 
@@ -398,8 +502,8 @@ export const MonitorPage: React.FC = () => {
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
                       <Cctv className="text-muted-foreground flex-shrink-0" size={18} />
-                      <span className="font-medium text-foreground text-base truncate" title={streamer.streamerHrName}>
-                        {streamer.streamerHrName}
+                      <span className="font-medium text-foreground text-base truncate" title={displayData.streamerHrName}>
+                        {displayData.streamerHrName}
                       </span>
                     </div>
 
@@ -450,7 +554,7 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-blue-900/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/60 hover:border-blue-700' 
                                             : 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 hover:border-blue-400'
                                         }`}
-                                        onClick={() => console.log(`Opening logs for ${streamer.streamerHrName} - ${appName}`)}
+                                        onClick={() => console.log(`Opening logs for ${displayData.streamerHrName} - ${appName}`)}
                                       >
                                         <BarChart3 className="w-3 h-3" /> Logs
                                       </button>
@@ -463,7 +567,7 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-purple-900/40 text-purple-300 border border-purple-800/50 hover:bg-purple-900/60 hover:border-purple-700' 
                                             : 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 hover:border-purple-400'
                                         }`}
-                                        onClick={() => console.log(`Opening memory for ${streamer.streamerHrName} - ${appName}`)}
+                                        onClick={() => console.log(`Opening memory for ${displayData.streamerHrName} - ${appName}`)}
                                       >
                                         <Brain className="w-3 h-3" /> Memory
                                       </button>
@@ -479,7 +583,7 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-green-900/40 text-green-300 border border-green-800/50 hover:bg-green-900/60 hover:border-green-700' 
                                             : 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 hover:border-green-400'
                                         }`}
-                                        onClick={() => console.log(`Opening text scans for ${streamer.streamerHrName} - ${appName}`)}
+                                        onClick={() => console.log(`Opening text scans for ${displayData.streamerHrName} - ${appName}`)}
                                       >
                                         <FileText className="w-3 h-3" /> Text Scans
                                       </button>
@@ -495,7 +599,7 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-orange-900/40 text-orange-300 border border-orange-800/50 hover:bg-orange-900/60 hover:border-orange-700' 
                                             : 'bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 hover:border-orange-400'
                                         }`}
-                                        onClick={() => console.log(`Opening scans for ${streamer.streamerHrName} - ${appName}`)}
+                                        onClick={() => console.log(`Opening scans for ${displayData.streamerHrName} - ${appName}`)}
                                       >
                                         <ScanLine className="w-3 h-3" /> Scans
                                       </button>
@@ -521,7 +625,10 @@ export const MonitorPage: React.FC = () => {
       {/* Manage Favorites Modal */}
       <ManageFavoritesModal 
         isOpen={manageFavoritesOpen}
-        onClose={() => setManageFavoritesOpen(false)}
+        onClose={() => {
+          setManageFavoritesOpen(false);
+          refreshFavorites(); // Refresh favorites when the modal is closed
+        }}
       />
     </div>
   );

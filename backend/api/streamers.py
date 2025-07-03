@@ -17,8 +17,34 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 # Create blueprint for streamers API
-streamers_bp = Blueprint('streamers', __name__)
+streamers_bp = Blueprint('streamers', __name__, url_prefix='/api/streamers')
 streamers_api = Api(streamers_bp)
+
+
+class StreamersProxyResource(Resource):
+    def get(self):
+        """Proxy request to AI service to get streamers info"""
+        try:
+            compute_unit_ip = request.args.get('compute_unit_ip')
+            if not compute_unit_ip:
+                return {'message': 'compute_unit_ip parameter is required'}, 400
+            
+            # Make request to AI service
+            ai_service_url = f"http://{compute_unit_ip}/streamers/public/get_streamers_infos"
+            logger.info(f"Proxying request to: {ai_service_url}")
+            
+            response = requests.get(ai_service_url, timeout=10)
+            response.raise_for_status()
+            
+            # Return the AI service response
+            return response.json(), 200
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error proxying request to AI service {compute_unit_ip}: {e}")
+            return {'message': f'Failed to connect to AI service at {compute_unit_ip}'}, 500
+        except Exception as e:
+            logger.error(f"Unexpected error in proxy request: {e}")
+            return {'message': 'Internal server error'}, 500
 
 
 class StreamersResource(Resource):
@@ -114,28 +140,30 @@ class StreamersResource(Resource):
 
 
 # Register resources with the API
+streamers_api.add_resource(StreamersProxyResource, '/proxy')
 streamers_api.add_resource(StreamersResource, '/get_streamers')
 streamers_api.add_resource(StreamersResource, '/add_streamer', endpoint='add_streamer')
 
 
 # Additional Flask routes for streamers API
-@streamers_bp.route('/api/streamers/last_frame', methods=['POST'])
+@streamers_bp.route('/last_frame', methods=['POST'])
 def get_last_frame():
     """Get last frame from a streamer via AI service"""
     data = request.get_json()
     streamer_uuid = data.get('streamer_uuid')
+    compute_unit_ip = data.get('compute_unit_ip')
+    
     if not streamer_uuid:
         return jsonify({"error": "streamer_uuid is required"}), 400
         
     try:
-        # Find the streamer's compute unit IP from favorites table
-        favorite_streamer = FavoriteStreamer.query.filter_by(streamer_uuid=streamer_uuid).first()
-        
-        if not favorite_streamer:
-            logger.error(f"Streamer {streamer_uuid} not found in favorites")
-            return jsonify({"error": "Streamer not found in favorites"}), 404
-        
-        compute_unit_ip = favorite_streamer.compute_unit_ip
+        # Use provided compute_unit_ip or find from favorites table
+        if not compute_unit_ip:
+            favorite_streamer = FavoriteStreamer.query.filter_by(streamer_uuid=streamer_uuid).first()
+            if not favorite_streamer:
+                logger.error(f"Streamer {streamer_uuid} not found in favorites and no compute_unit_ip provided")
+                return jsonify({"error": "Streamer not found in favorites and no compute_unit_ip provided"}), 404
+            compute_unit_ip = favorite_streamer.compute_unit_ip
         
         # Build the correct endpoint URL using the compute unit's IP
         if ':' in compute_unit_ip:
@@ -221,7 +249,7 @@ def get_streamer_configs():
         return jsonify({"error": "An internal server error occurred"}), 500
 
 
-@streamers_bp.route('/api/streamers/update_name', methods=['PUT'])
+@streamers_bp.route('/update_name', methods=['PUT'])
 def update_streamer_name():
     """Update streamer name by proxying to the AI service"""
     try:
