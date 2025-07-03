@@ -973,6 +973,17 @@ class StreamerAppAssignmentsResource(Resource):
                 if response.status_code == 200:
                     ai_data = response.json()
                     logger.info(f"Successfully fetched app assignments from {compute_unit_ip}")
+                    
+                    # If streamer_uuid is provided, filter assignments to only include that specific streamer
+                    if streamer_uuid and 'assignments' in ai_data:
+                        original_count = len(ai_data['assignments'])
+                        ai_data['assignments'] = [
+                            assignment for assignment in ai_data['assignments']
+                            if assignment.get('streamer_uuid') == streamer_uuid
+                        ]
+                        filtered_count = len(ai_data['assignments'])
+                        logger.info(f"Filtered assignments for streamer {streamer_uuid}: {original_count} -> {filtered_count}")
+                    
                     return ai_data, 200
                 else:
                     logger.warning(f"AI system at {compute_unit_ip} returned status {response.status_code}")

@@ -167,12 +167,29 @@ const convertAIStreamerToCameraForApps = async (aiStreamer: any, computeUnitIP: 
   // Load current assignments for this streamer
   let features: string[] = [];
   try {
+    console.log(`🔄 [Convert] Loading assignments for streamer: ${aiStreamer.streamer_uuid} (${aiStreamer.streamer_hr_name}) on compute unit: ${computeUnitIP}`);
     const assignments = await fetchAppAssignments(computeUnitIP, aiStreamer.streamer_uuid);
+    console.log(`📋 [Convert] Found ${assignments.length} assignments for streamer ${aiStreamer.streamer_uuid}:`, assignments.map(a => ({
+      id: a.id,
+      app: a.app_name,
+      result: a.app_config_template_name,
+      active: a.is_active,
+      uuid: a.assignment_uuid,
+      streamer_uuid: a.streamer_uuid // Add this to verify it matches
+    })));
+    
+    // Verify all assignments belong to this streamer
+    const incorrectAssignments = assignments.filter(a => a.streamer_uuid !== aiStreamer.streamer_uuid);
+    if (incorrectAssignments.length > 0) {
+      console.error(`❌ [Convert] CRITICAL: Found ${incorrectAssignments.length} assignments that don't belong to streamer ${aiStreamer.streamer_uuid}:`, incorrectAssignments);
+    }
+    
     features = assignments
       .filter(assignment => assignment.is_active === 'true')
       .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+    console.log(`✅ [Convert] Active features for streamer ${aiStreamer.streamer_uuid}:`, features);
   } catch (error) {
-    console.error(`Failed to load assignments for streamer ${aiStreamer.streamer_uuid}:`, error);
+    console.error(`❌ [Convert] Failed to load assignments for streamer ${aiStreamer.streamer_uuid}:`, error);
   }
 
   return {
@@ -216,6 +233,7 @@ const calculateUptime = (lastSeen: string): string => {
 // Fetch app assignments for a specific streamer
 const fetchAppAssignments = async (computeUnitIP: string, streamerUuid: string): Promise<AppAssignment[]> => {
   try {
+    console.log(`🌐 [API] Fetching assignments for streamer ${streamerUuid} from ${computeUnitIP}`);
     const response = await fetch(`${API_BASE_URL}/api/apps/assignments?compute_unit_ip=${encodeURIComponent(computeUnitIP)}&streamer_uuid=${encodeURIComponent(streamerUuid)}`, {
       method: 'GET',
       headers: {
@@ -225,13 +243,41 @@ const fetchAppAssignments = async (computeUnitIP: string, streamerUuid: string):
     
     if (response.ok) {
       const data: AppAssignmentsResponse = await response.json();
-      return data.assignments || [];
+      console.log(`📊 [API] Response for streamer ${streamerUuid}:`, {
+        total_assignments: data.assignments?.length || 0,
+        assignments: data.assignments?.map(a => ({
+          id: a.id,
+          app: a.app_name,
+          result: a.app_config_template_name,
+          active: a.is_active,
+          streamer: a.streamer_uuid
+        })) || []
+      });
+      
+      // Double-check: Filter assignments to ensure we only get the ones for this specific streamer
+      let filteredAssignments = data.assignments || [];
+      if (filteredAssignments.length > 0) {
+        const originalCount = filteredAssignments.length;
+        filteredAssignments = filteredAssignments.filter(assignment => assignment.streamer_uuid === streamerUuid);
+        const filteredCount = filteredAssignments.length;
+        
+        if (originalCount !== filteredCount) {
+          console.warn(`⚠️ [API] Had to filter assignments! Original: ${originalCount}, Filtered: ${filteredCount} for streamer ${streamerUuid}`);
+          console.warn(`⚠️ [API] Assignments that were incorrectly included:`, 
+            (data.assignments || [])
+              .filter(assignment => assignment.streamer_uuid !== streamerUuid)
+              .map(a => ({ streamer: a.streamer_uuid, app: a.app_name, result: a.app_config_template_name }))
+          );
+        }
+      }
+      
+      return filteredAssignments;
     } else {
-      console.error(`Failed to fetch app assignments for ${streamerUuid}: HTTP ${response.status}`);
+      console.error(`❌ [API] Failed to fetch app assignments for ${streamerUuid}: HTTP ${response.status}`);
       return [];
     }
   } catch (error) {
-    console.error(`Failed to fetch app assignments for ${streamerUuid}:`, error);
+    console.error(`❌ [API] Failed to fetch app assignments for ${streamerUuid}:`, error);
     return [];
   }
 };
@@ -344,6 +390,8 @@ export const AppsPage: React.FC = () => {
         if (!loading && !modalOpen) { // Don't poll if modal is open
           console.log('🔄 Polling for Apps page updates...');
           await loadComputeUnitsWithCameras();
+        } else if (modalOpen) {
+          console.log('⏸️ Polling paused - modal is open');
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -435,13 +483,22 @@ export const AppsPage: React.FC = () => {
 
     const loadCurrentAssignments = async () => {
       try {
+        console.log(`🔍 [Modal] Loading assignments for streamer: ${streamerUuid} on compute unit: ${computeUnitIP}`);
         const assignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
+        console.log(`📋 [Modal] Found ${assignments.length} assignments for streamer ${streamerUuid}:`, assignments.map(a => ({
+          id: a.id,
+          app: a.app_name,
+          result: a.app_config_template_name,
+          active: a.is_active,
+          uuid: a.assignment_uuid,
+          streamer: a.streamer_uuid
+        })));
         setCurrentAssignments(assignments);
         
         // Note: We don't call onFeaturesChange here to avoid infinite loops
         // The parent component should already have the correct features from the initial load
       } catch (error) {
-        console.error('Failed to load current assignments:', error);
+        console.error('❌ [Modal] Failed to load current assignments:', error);
         setCurrentAssignments([]);
       }
     };
@@ -463,9 +520,16 @@ export const AppsPage: React.FC = () => {
       
       setSavingChanges(true);
       try {
+        console.log(`➕ [Modal] Adding ${selectedResults.length} features to streamer ${streamerUuid}:`, selectedResults);
+        
         // Create assignments for each selected result
         const addPromises = selectedResults.map(async (resultName) => {
-          const assignmentUuid = `${streamerUuid}_${selectedApp}_${resultName}_${Date.now()}`;
+          // Make UUID more unique by adding random component
+          const timestamp = Date.now();
+          const random = Math.random().toString(36).substring(7);
+          const assignmentUuid = `${streamerUuid}_${selectedApp}_${resultName}_${timestamp}_${random}`;
+          console.log(`🆔 [Modal] Creating assignment with UUID: ${assignmentUuid}`);
+          
           const assignment = {
             manuel_timestamp: new Date().toISOString(),
             assignment_uuid: assignmentUuid,
@@ -475,23 +539,28 @@ export const AppsPage: React.FC = () => {
             is_active: 'true'
           };
           
+          console.log(`💾 [Modal] Saving assignment:`, assignment);
           const success = await updateAppAssignment(computeUnitIP, assignment);
           if (!success) {
             throw new Error(`Failed to add assignment for ${selectedApp}.${resultName}`);
           }
+          console.log(`✅ [Modal] Successfully added assignment for ${selectedApp}.${resultName}`);
           return assignment;
         });
 
         await Promise.all(addPromises);
         
         // Reload assignments to get the latest state
+        console.log(`🔄 [Modal] Reloading assignments after adding features...`);
         await loadCurrentAssignments();
         
-        // Update parent component with new features
+        // Update parent component with new features - fetch fresh data for THIS streamer only
+        console.log(`🔍 [Modal] Fetching fresh assignments for streamer ${streamerUuid} after adding features`);
         const updatedAssignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
         const features = updatedAssignments
           .filter(assignment => assignment.is_active === 'true')
           .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+        console.log(`✅ [Modal] Updated features for streamer ${streamerUuid}:`, features);
         onFeaturesChange(features);
         
         // Reset form
@@ -499,7 +568,7 @@ export const AppsPage: React.FC = () => {
         setSelectedResults([]);
         
       } catch (error) {
-        console.error('Failed to add features:', error);
+        console.error('❌ [Modal] Failed to add features:', error);
         setError('Failed to add selected features. Please try again.');
       } finally {
         setSavingChanges(false);
@@ -509,6 +578,8 @@ export const AppsPage: React.FC = () => {
     const handleRemoveFeature = async (featureToRemove: string) => {
       const [appName, resultName] = featureToRemove.split('.', 2);
       
+      console.log(`🗑️ [Modal] Removing feature ${featureToRemove} for streamer ${streamerUuid}`);
+      
       // Find the assignment to remove
       const assignmentToRemove = currentAssignments.find(
         assignment => assignment.app_name === appName && 
@@ -517,9 +588,16 @@ export const AppsPage: React.FC = () => {
       );
       
       if (!assignmentToRemove) {
-        console.warn('Assignment not found for feature:', featureToRemove);
+        console.warn(`⚠️ [Modal] Assignment not found for feature: ${featureToRemove}`);
         return;
       }
+
+      console.log(`🎯 [Modal] Found assignment to remove:`, {
+        id: assignmentToRemove.id,
+        uuid: assignmentToRemove.assignment_uuid,
+        app: assignmentToRemove.app_name,
+        result: assignmentToRemove.app_config_template_name
+      });
 
       setSavingChanges(true);
       try {
@@ -528,18 +606,23 @@ export const AppsPage: React.FC = () => {
           throw new Error(`Failed to remove assignment for ${featureToRemove}`);
         }
         
+        console.log(`✅ [Modal] Successfully removed assignment for ${featureToRemove}`);
+        
         // Reload assignments to get the latest state
+        console.log(`🔄 [Modal] Reloading assignments after removing feature...`);
         await loadCurrentAssignments();
         
-        // Update parent component with new features
+        // Update parent component with new features - fetch fresh data for THIS streamer only
+        console.log(`🔍 [Modal] Fetching fresh assignments for streamer ${streamerUuid} after removing feature`);
         const updatedAssignments = await fetchAppAssignments(computeUnitIP, streamerUuid);
         const features = updatedAssignments
           .filter(assignment => assignment.is_active === 'true')
           .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
+        console.log(`✅ [Modal] Updated features for streamer ${streamerUuid}:`, features);
         onFeaturesChange(features);
         
       } catch (error) {
-        console.error('Failed to remove feature:', error);
+        console.error('❌ [Modal] Failed to remove feature:', error);
         setError('Failed to remove feature. Please try again.');
       } finally {
         setSavingChanges(false);
@@ -644,28 +727,52 @@ export const AppsPage: React.FC = () => {
                       2. Select Results ({selectedResults.length} selected)
                     </label>
                     <div className={`space-y-2 max-h-60 overflow-y-auto border ${inputBorder} rounded-lg p-3`}>
-                      {getSelectedAppObject()?.results.map((result) => (
+                      {getSelectedAppObject()?.results.map((result) => {
+                        // Check if this result is already assigned to this streamer
+                        const isAlreadyAssigned = currentAssignments.some(
+                          assignment => assignment.app_name === selectedApp && 
+                                       assignment.app_config_template_name === result.result_name &&
+                                       assignment.is_active === 'true'
+                        );
+                        
+                        return (
                         <div
                           key={result.result_name}
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                            selectedResults.includes(result.result_name) 
-                              ? selectedBg
-                              : `${hoverBg} border border-transparent`
+                          className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
+                            isAlreadyAssigned
+                              ? `opacity-50 cursor-not-allowed ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`
+                              : selectedResults.includes(result.result_name) 
+                                ? selectedBg + ' cursor-pointer'
+                                : `${hoverBg} border border-transparent cursor-pointer`
                           }`}
-                          onClick={() => handleResultToggle(result.result_name)}
+                          onClick={() => {
+                            if (!isAlreadyAssigned) {
+                              handleResultToggle(result.result_name);
+                            }
+                          }}
                         >
                           <div className={`flex h-5 w-5 items-center justify-center rounded border-2 mt-0.5 transition-all ${
-                            selectedResults.includes(result.result_name)
-                              ? 'border-blue-500 bg-blue-500'
-                              : `${checkboxBorder} ${checkboxBg} ${checkboxHover}`
+                            isAlreadyAssigned
+                              ? `${checkboxBorder} ${checkboxBg} opacity-50`
+                              : selectedResults.includes(result.result_name)
+                                ? 'border-blue-500 bg-blue-500'
+                                : `${checkboxBorder} ${checkboxBg} ${checkboxHover}`
                           }`}>
-                            {selectedResults.includes(result.result_name) && (
+                            {selectedResults.includes(result.result_name) && !isAlreadyAssigned && (
                               <Check className="h-3 w-3 text-white font-bold" strokeWidth={3} />
+                            )}
+                            {isAlreadyAssigned && (
+                              <Check className="h-3 w-3 text-gray-400 font-bold" strokeWidth={3} />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className={`font-medium ${textColor} text-sm truncate`}>
+                            <div className={`font-medium text-sm truncate ${
+                              isAlreadyAssigned ? 'text-muted-foreground' : textColor
+                            }`}>
                               {result.result_name}
+                              {isAlreadyAssigned && (
+                                <span className="ml-2 text-xs opacity-75">(Already assigned)</span>
+                              )}
                             </div>
                             <div className={`text-xs ${subtextColor} mt-1 truncate`}>
                               Type: {result.result_data_type}
@@ -677,7 +784,8 @@ export const AppsPage: React.FC = () => {
                             )}
                           </div>
                         </div>
-                      )) || []}
+                        );
+                      }) || []}
                     </div>
                   </div>
                 )}
@@ -803,6 +911,46 @@ export const AppsPage: React.FC = () => {
       default:
         return 'bg-muted';
     }
+  };
+
+  // Function to get consistent color for an app across all cameras
+  const getAppColorScheme = (appName: string) => {
+    // Define consistent color schemes
+    const appColors = theme === 'dark' ? [
+      { bg: 'bg-blue-900/50', text: 'text-blue-300', border: 'border-blue-700' },
+      { bg: 'bg-green-900/50', text: 'text-green-300', border: 'border-green-700' },
+      { bg: 'bg-purple-900/50', text: 'text-purple-300', border: 'border-purple-700' },
+      { bg: 'bg-orange-900/50', text: 'text-orange-300', border: 'border-orange-700' },
+      { bg: 'bg-red-900/50', text: 'text-red-300', border: 'border-red-700' },
+      { bg: 'bg-yellow-900/50', text: 'text-yellow-300', border: 'border-yellow-700' },
+      { bg: 'bg-indigo-900/50', text: 'text-indigo-300', border: 'border-indigo-700' },
+      { bg: 'bg-pink-900/50', text: 'text-pink-300', border: 'border-pink-700' },
+      { bg: 'bg-teal-900/50', text: 'text-teal-300', border: 'border-teal-700' },
+      { bg: 'bg-cyan-900/50', text: 'text-cyan-300', border: 'border-cyan-700' },
+    ] : [
+      { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
+      { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
+      { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' },
+      { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200' },
+      { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
+      { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
+      { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200' },
+      { bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200' },
+      { bg: 'bg-teal-100', text: 'text-teal-800', border: 'border-teal-200' },
+      { bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-200' },
+    ];
+
+    // Create a consistent hash from app name to get the same color every time
+    let hash = 0;
+    for (let i = 0; i < appName.length; i++) {
+      const char = appName.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Use absolute value and modulo to get consistent positive index
+    const colorIndex = Math.abs(hash) % appColors.length;
+    return appColors[colorIndex];
   };
 
   const filteredUnits = computeUnits.filter(unit => 
@@ -961,29 +1109,9 @@ export const AppsPage: React.FC = () => {
                             return acc;
                           }, {} as Record<string, string[]>);
 
-                          // App color mapping
-                          const appColors = theme === 'dark' ? [
-                            { bg: 'bg-blue-900/50', text: 'text-blue-300', border: 'border-blue-700' },
-                            { bg: 'bg-green-900/50', text: 'text-green-300', border: 'border-green-700' },
-                            { bg: 'bg-purple-900/50', text: 'text-purple-300', border: 'border-purple-700' },
-                            { bg: 'bg-orange-900/50', text: 'text-orange-300', border: 'border-orange-700' },
-                            { bg: 'bg-red-900/50', text: 'text-red-300', border: 'border-red-700' },
-                            { bg: 'bg-yellow-900/50', text: 'text-yellow-300', border: 'border-yellow-700' },
-                            { bg: 'bg-indigo-900/50', text: 'text-indigo-300', border: 'border-indigo-700' },
-                            { bg: 'bg-pink-900/50', text: 'text-pink-300', border: 'border-pink-700' },
-                          ] : [
-                            { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
-                            { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
-                            { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' },
-                            { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200' },
-                            { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
-                            { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
-                            { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200' },
-                            { bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200' },
-                          ];
-
-                          return Object.entries(groupedFeatures).map(([appName, results], appIndex) => {
-                            const colorScheme = appColors[appIndex % appColors.length];
+                          return Object.entries(groupedFeatures).map(([appName, results]) => {
+                            // Get consistent color scheme for this app across all cameras
+                            const colorScheme = getAppColorScheme(appName);
                             return (
                               <div key={appName} className="space-y-2">
                                 {/* App Name Header */}
@@ -1074,27 +1202,58 @@ export const AppsPage: React.FC = () => {
         <AppConfigurationModal
           isOpen={modalOpen}
           onClose={() => {
+            console.log('🚪 Modal closing...');
             setModalOpen(false);
             setSelectedCamera(null);
+            
+            // Wait a bit before the next polling cycle to ensure backend is consistent
+            setTimeout(() => {
+              console.log('⏰ Modal closed, next polling cycle will begin soon...');
+            }, 2000);
           }}
           cameraName={selectedCamera.name}
           computeUnitIP={selectedCamera.computeUnitIP}
           streamerUuid={selectedCamera.streamerUuid}
           selectedFeatures={selectedCamera.features}
           onFeaturesChange={(features: string[]) => {
+            console.log(`🔄 [Main] Updating features for camera ${selectedCamera.cameraId} (streamer: ${selectedCamera.streamerUuid}):`, features);
+            console.log(`🎯 [Main] Camera details:`, {
+              cameraId: selectedCamera.cameraId,
+              cameraName: selectedCamera.name,
+              streamerUuid: selectedCamera.streamerUuid,
+              unitId: selectedCamera.unitId,
+              computeUnitIP: selectedCamera.computeUnitIP
+            });
+            
             // Update the camera features in the state
-            setComputeUnits(prev => prev.map(u => 
-              u.id === selectedCamera.unitId 
-                ? {
-                    ...u,
-                    cameras: u.cameras.map(c => 
-                      c.id === selectedCamera.cameraId
-                        ? { ...c, features }
-                        : c
-                    )
-                  }
-                : u
-            ));
+            setComputeUnits(prev => {
+              const updated = prev.map(u => 
+                u.id === selectedCamera.unitId 
+                  ? {
+                      ...u,
+                      cameras: u.cameras.map(c => 
+                        c.id === selectedCamera.cameraId
+                          ? { ...c, features }
+                          : c
+                      )
+                    }
+                  : u
+              );
+              
+              console.log(`📋 [Main] Updated compute units state:`, updated.map(u => ({
+                unitId: u.id,
+                unitName: u.name,
+                cameras: u.cameras.map(c => ({
+                  cameraId: c.id,
+                  cameraName: c.name,
+                  streamerUuid: c.streamerUuid,
+                  featuresCount: c.features.length,
+                  features: c.features
+                }))
+              })));
+              
+              return updated;
+            });
             
             // Update the selectedCamera state as well
             setSelectedCamera(prev => prev ? { ...prev, features } : null);
