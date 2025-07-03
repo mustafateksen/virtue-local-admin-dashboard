@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CircleAlert, CircleCheck, Cctv, X, Play, Square, Settings, Star } from 'lucide-react';
+import { CircleAlert, CircleCheck, Cctv, X, Play, Square, Settings, Star, FileText, Brain, ScanLine, BarChart3 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { ManageFavoritesModal } from '../components/ManageFavoritesModal';
@@ -140,9 +140,9 @@ export const MonitorPage: React.FC = () => {
       const statuses: Record<string, any> = {};
       
       for (const streamer of favoriteStreamers) {
-        // Generate mock data for demonstration
+        // TODO: BURASI API ILE BAĞLANACAK - Gerçek anomali durumu API'den gelecek
         statuses[streamer.streamerUuid] = {
-          status: Math.random() > 0.7 ? 'anomaly' : 'analyzing',
+          status: 'analyzing', // Default to analyzing, will be replaced with API data
           data: Array.from({ length: 10 }, () => Math.floor(Math.random() * 25) + 1),
           isAlive: streamer.isAlive === 'true'
         };
@@ -360,7 +360,10 @@ export const MonitorPage: React.FC = () => {
                             setModalOpen(true); 
                           }}
                         />
-                        <div className={`absolute inset-0 rounded-xl ${displayData.overlayColor} opacity-40 pointer-events-none`} />
+                        {/* Overlay for anomaly detection - only show when anomaly is detected */}
+                        {displayData.status === 'anomaly' && (
+                          <div className={`absolute inset-0 rounded-xl ${displayData.overlayColor} opacity-40 pointer-events-none`} />
+                        )}
                         
                         {/* Live indicator */}
                         <div className="absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 bg-red-600 text-white">
@@ -399,12 +402,11 @@ export const MonitorPage: React.FC = () => {
                         {streamer.streamerHrName}
                       </span>
                     </div>
-                    
-                    {/* App Assignment Tags */}
+
+                    {/* App Features Section */}
                     {streamerAssignments[streamer.streamerUuid] && streamerAssignments[streamer.streamerUuid].length > 0 && (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="space-y-3">
                         {(() => {
-                          // Group assignments by app_name
                           const activeAssignments = streamerAssignments[streamer.streamerUuid]
                             .filter(assignment => assignment.is_active === 'true' || assignment.is_active === '1');
                           
@@ -416,73 +418,97 @@ export const MonitorPage: React.FC = () => {
                             return acc;
                           }, {} as Record<string, string[]>);
 
-                          return Object.entries(groupedApps).map(([appName, results]) => (
-                            <div key={appName} className="relative group">
-                              <span
-                                className={`px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-                                  appName === 'ANOMALY'
-                                    ? theme === 'dark'
-                                      ? 'bg-red-900/50 text-red-300 border border-red-800 hover:bg-red-900/70'
-                                      : 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-150'
-                                    : appName === 'OCR'
-                                    ? theme === 'dark'
-                                      ? 'bg-blue-900/50 text-blue-300 border border-blue-800 hover:bg-blue-900/70'
-                                      : 'bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-150'
-                                    : appName === 'CODE-SCANNER'
-                                    ? theme === 'dark'
-                                      ? 'bg-green-900/50 text-green-300 border border-green-800 hover:bg-green-900/70'
-                                      : 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-150'
-                                    : theme === 'dark'
-                                      ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'
-                                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-150'
-                                }`}
-                              >
-                                {appName}
-                              </span>
-                              
-                              {/* Tooltip */}
-                              {results.length > 0 && (
-                                <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap ${
-                                  theme === 'dark' 
-                                    ? 'bg-gray-800 text-gray-200 border border-gray-600' 
-                                    : 'bg-white text-gray-800 border border-gray-200'
-                                }`}
-                                style={{
-                                  minWidth: 'max-content',
-                                  left: '50%',
-                                  transform: 'translateX(-50%)',
-                                  zIndex: 9999
-                                }}>
-                                  <div className="font-medium mb-1">{appName}</div>
-                                  <div className="text-xs opacity-75">
-                                    Results: {results.join(', ')}
-                                  </div>
-                                  {/* Arrow */}
-                                  <div className={`absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent ${
-                                    theme === 'dark' ? 'border-t-gray-800' : 'border-t-white'
+                          return Object.entries(groupedApps).map(([appName]) => (
+                            <div key={appName} className={`rounded-lg border p-3 ${
+                              theme === 'dark' ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'
+                            }`}>
+                              {/* App Header */}
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    appName.toUpperCase().includes('ANOMALY') ? 'bg-red-500' :
+                                    appName.toUpperCase().includes('OCR') ? 'bg-blue-500' :
+                                    (appName.toUpperCase().includes('CODE') || appName.toUpperCase().includes('SCANNER')) ? 'bg-green-500' : 'bg-gray-500'
                                   }`} />
+                                  <span className="text-sm font-medium text-foreground">
+                                    {appName.toLowerCase().replace('-', '_')}
+                                  </span>
                                 </div>
-                              )}
+                              </div>
+
+                              {/* Feature Buttons */}
+                              <div className="flex flex-wrap gap-2">
+                                {(() => {
+                                  const buttons = [];
+                                  
+                                  if (appName.toUpperCase().includes('ANOMALY')) {
+                                    buttons.push(
+                                      <button
+                                        key="logs"
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                          theme === 'dark' 
+                                            ? 'bg-blue-900/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/60 hover:border-blue-700' 
+                                            : 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 hover:border-blue-400'
+                                        }`}
+                                        onClick={() => console.log(`Opening logs for ${streamer.streamerHrName} - ${appName}`)}
+                                      >
+                                        <BarChart3 className="w-3 h-3" /> Logs
+                                      </button>
+                                    );
+                                    buttons.push(
+                                      <button
+                                        key="memory"
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                          theme === 'dark' 
+                                            ? 'bg-purple-900/40 text-purple-300 border border-purple-800/50 hover:bg-purple-900/60 hover:border-purple-700' 
+                                            : 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 hover:border-purple-400'
+                                        }`}
+                                        onClick={() => console.log(`Opening memory for ${streamer.streamerHrName} - ${appName}`)}
+                                      >
+                                        <Brain className="w-3 h-3" /> Memory
+                                      </button>
+                                    );
+                                  }
+                                  
+                                  if (appName.toUpperCase().includes('OCR')) {
+                                    buttons.push(
+                                      <button
+                                        key="text-scans"
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                          theme === 'dark' 
+                                            ? 'bg-green-900/40 text-green-300 border border-green-800/50 hover:bg-green-900/60 hover:border-green-700' 
+                                            : 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 hover:border-green-400'
+                                        }`}
+                                        onClick={() => console.log(`Opening text scans for ${streamer.streamerHrName} - ${appName}`)}
+                                      >
+                                        <FileText className="w-3 h-3" /> Text Scans
+                                      </button>
+                                    );
+                                  }
+                                  
+                                  if (appName.toUpperCase().includes('CODE') || appName.toUpperCase().includes('READER') || appName.toUpperCase().includes('SCANNER')) {
+                                    buttons.push(
+                                      <button
+                                        key="scans"
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                          theme === 'dark' 
+                                            ? 'bg-orange-900/40 text-orange-300 border border-orange-800/50 hover:bg-orange-900/60 hover:border-orange-700' 
+                                            : 'bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 hover:border-orange-400'
+                                        }`}
+                                        onClick={() => console.log(`Opening scans for ${streamer.streamerHrName} - ${appName}`)}
+                                      >
+                                        <ScanLine className="w-3 h-3" /> Scans
+                                      </button>
+                                    );
+                                  }
+                                  
+                                  return buttons;
+                                })()}
+                              </div>
                             </div>
                           ));
                         })()}
                       </div>
-                    )}
-                    
-                    {isOnline ? (
-                      // Online: Show anomaly/normal status
-                      <span className={`${displayData.statusBg} ${displayData.statusText} rounded-lg flex items-center justify-center p-2 gap-2 text-sm font-medium transition-all duration-300 ease-in-out hover:scale-105 cursor-pointer`}>
-                        {displayData.status === 'anomaly' ? <CircleAlert size={14} /> : <CircleCheck size={14} />}
-                        {displayData.status === 'anomaly' ? 'Anomaly Detected' : 'Normal Operation'}
-                      </span>
-                    ) : (
-                      // Offline: Show offline status
-                      <span className={`rounded-lg flex items-center justify-center p-2 gap-2 text-sm font-medium ${
-                        theme === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        <X size={14} />
-                        Camera Offline
-                      </span>
                     )}
                   </div>
                 </div>
