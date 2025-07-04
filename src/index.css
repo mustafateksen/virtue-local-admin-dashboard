@@ -55,4 +55,61 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
   }
+  
+  /* Global button styling */
+  button {
+    cursor: pointer;
+  }
+  
+  /* Also apply to elements with button role */
+  [role="button"] {
+    cursor: pointer;
+  }
+  
+  /* For disabled buttons, use default cursor */
+  button:disabled,
+  button[disabled] {
+    cursor: not-allowed;
+  }
+  
+  /* Dropdown and select elements */
+  select {
+    cursor: pointer;
+  }
+  
+  /* Dropdown options */
+  option {
+    cursor: pointer;
+  }
+  
+  /* Common interactive elements */
+  [role="combobox"],
+  [role="listbox"],
+  [role="option"],
+  [role="menuitem"],
+  [role="tab"],
+  [role="tabpanel"] {
+    cursor: pointer;
+  }
+  
+  /* Links that look like buttons or interactive elements */
+  a[role="button"] {
+    cursor: pointer;
+  }
+  
+  /* Clickable divs and spans */
+  [onclick] {
+    cursor: pointer;
+  }
+  
+  /* Checkbox and radio inputs */
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: pointer;
+  }
+  
+  /* Labels for form controls */
+  label {
+    cursor: pointer;
+  }
 }

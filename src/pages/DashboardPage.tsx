@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Monitor, HardDrive, Cpu, Activity, Server, Settings, ArrowRight, Package, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useComputeUnitStatus } from '../hooks/useComputeUnitStatus';
 
@@ -57,7 +57,7 @@ export const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 lg:space-y-10">
+    <div className="space-y-6 lg:space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -245,13 +245,6 @@ export const DashboardPage: React.FC = () => {
               <span>Monitor Streamers</span>
             </button>
             <button 
-              onClick={() => navigate('/logs')}
-              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
-            >
-              <FileWarning className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
-              <span>Logs</span>
-            </button>
-            <button 
               onClick={() => navigate('/devices')}
               className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
             >
@@ -264,6 +257,13 @@ export const DashboardPage: React.FC = () => {
             >
               <Package className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
               <span>Apps</span>
+            </button>
+            <button 
+              onClick={() => navigate('/settings')}
+              className="cursor-pointer flex items-center justify-center px-6 py-4 lg:px-8 lg:py-6 border border-border rounded-lg shadow-sm bg-card text-sm lg:text-base font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:shadow-md"
+            >
+              <Settings className="h-6 w-6 lg:h-7 lg:w-7 mr-3" />
+              <span>Settings</span>
             </button>
           </div>
         </div>

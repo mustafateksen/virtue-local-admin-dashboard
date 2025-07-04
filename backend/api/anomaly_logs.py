@@ -49,7 +49,7 @@ class AnomalyLogsMetadataResource(Resource):
 
 class AnomalyLogImageResource(Resource):
     def get(self):
-        """Proxy request to AI service to get anomaly log image"""
+        """Serve anomaly log image by reading from compute unit's file system via HTTP request"""
         try:
             compute_unit_ip = request.args.get('compute_unit_ip')
             file_path = request.args.get('file_path')
@@ -59,44 +59,73 @@ class AnomalyLogImageResource(Resource):
             if not file_path:
                 return {'message': 'file_path parameter is required'}, 400
             
+            logger.info(f"Serving image from compute unit {compute_unit_ip}, file: {file_path}")
+            
             # Handle compute unit IP - remove port if it exists, then add :8000
             base_ip = compute_unit_ip.split(':')[0] if ':' in compute_unit_ip else compute_unit_ip
-            ai_service_url = f"http://{base_ip}:8000/anomaly_app_v1/public/get_anomaly_log_image_by_file_path"
             
-            logger.info(f"Proxying anomaly log image request to: {ai_service_url}")
+            # Try different possible methods to get the image from compute unit
+            image_urls_to_try = [
+                # Method 1: Try a direct file serve endpoint (if exists)
+                f"http://{base_ip}:8000/files{file_path}",
+                f"http://{base_ip}:8000/static{file_path}",
+                f"http://{base_ip}:8000/images{file_path}",
+                # Method 2: Try anomaly app specific endpoints
+                f"http://{base_ip}:8000/anomaly_app_v1/public/image{file_path}",
+                f"http://{base_ip}:8000/anomaly_app_v1/files{file_path}",
+            ]
             
-            # Send file_path as parameter to AI service
-            response = requests.get(ai_service_url, params={'file_path': file_path}, timeout=30, stream=True)
-            response.raise_for_status()
+            last_error = None
             
-            # Determine content type from response headers
-            content_type = response.headers.get('content-type', 'image/jpeg')
+            for image_url in image_urls_to_try:
+                try:
+                    logger.info(f"Trying to fetch image from: {image_url}")
+                    response = requests.get(image_url, timeout=10, stream=True)
+                    
+                    if response.status_code == 200:
+                        logger.info(f"Successfully found image at: {image_url}")
+                        
+                        # Determine content type
+                        content_type = response.headers.get('content-type')
+                        if not content_type:
+                            # Guess content type from file extension
+                            import mimetypes
+                            content_type, _ = mimetypes.guess_type(file_path)
+                            if not content_type:
+                                content_type = 'image/jpeg'
+                        
+                        # Extract filename from file_path
+                        import os
+                        filename = os.path.basename(file_path) if file_path else 'anomaly_image.jpg'
+                        
+                        # Create Flask response with the image data
+                        def generate():
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    yield chunk
+                        
+                        return Response(
+                            generate(),
+                            mimetype=content_type,
+                            headers={
+                                'Content-Disposition': f'inline; filename="{filename}"',
+                                'Cache-Control': 'public, max-age=3600'  # Cache for 1 hour
+                            }
+                        )
+                    
+                except requests.exceptions.RequestException as e:
+                    last_error = e
+                    logger.debug(f"Failed to fetch from {image_url}: {e}")
+                    continue
             
-            # Extract filename from file_path for the response
-            import os
-            filename = os.path.basename(file_path) if file_path else 'anomaly_image.jpg'
+            # If all methods failed, return a 404 error
+            logger.error(f"Could not find image at any URL for file: {file_path}")
+            logger.error(f"Last error: {last_error}")
             
-            # Create Flask response with the image data
-            def generate():
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        yield chunk
+            return {'message': f'Image not found: {file_path}'}, 404
             
-            return Response(
-                generate(),
-                mimetype=content_type,
-                headers={
-                    'Content-Disposition': f'inline; filename="{filename}"',
-                    'Cache-Control': 'public, max-age=3600'  # Cache for 1 hour
-                }
-            )
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error proxying anomaly log image request to AI service {compute_unit_ip}: {e}")
-            # Return a simple error response
-            return {'message': f'Failed to connect to AI service at {compute_unit_ip}'}, 500
         except Exception as e:
-            logger.error(f"Unexpected error in anomaly log image proxy request: {e}")
+            logger.error(f"Unexpected error in anomaly log image request: {e}")
             return {'message': 'Internal server error'}, 500
 
 

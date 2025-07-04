@@ -49,7 +49,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md sm:max-w-lg lg:max-w-xl w-full space-y-8">
+      <div className="max-w-md sm:max-w-lg lg:max-w-xl w-full space-y-6">
         <div>
           <h2 className="mt-6 text-center text-3xl sm:text-4xl lg:text-5xl font-extrabold text-foreground">
             Sign in to your account
@@ -59,8 +59,8 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="bg-card rounded-lg shadow-xl p-6 sm:p-8 lg:p-10 space-y-6 border border-border">
+        <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+          <div className="bg-card rounded-lg shadow-xl p-5 sm:p-6 lg:p-8 space-y-5 border border-border">
             {error && (
               <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 lg:px-6 lg:py-4 rounded text-sm sm:text-base">
                 {error}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Star, StarOff, Trash2, AlertTriangle, Calendar, Clock, Eye, Download, Filter, Search } from 'lucide-react';
+import { ArrowLeft, Star, StarOff, Trash2, AlertTriangle, Clock, Eye, Download, Filter, Search } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 // Get dynamic API base URL based on current window location
@@ -56,10 +56,10 @@ export const LogsPage: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  // Generate image URL for anomaly log - use direct file path from JSON
+  // Generate image URL for anomaly log - use backend proxy endpoint
   const getImageUrl = (filePath: string) => {
-    // Use the file path directly from the JSON response
-    return filePath;
+    // Use backend proxy to serve images from compute unit
+    return `${API_BASE_URL}/api/anomaly_logs/image?compute_unit_ip=${encodeURIComponent(computeUnitIP)}&file_path=${encodeURIComponent(filePath)}`;
   };
 
   // Handle image load error
@@ -206,7 +206,7 @@ export const LogsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

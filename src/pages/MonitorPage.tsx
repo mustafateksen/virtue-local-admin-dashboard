@@ -289,7 +289,7 @@ export const MonitorPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="space-y-4 lg:space-y-6">
       {/* Modal */}
       {modalOpen && (
         <div
@@ -389,7 +389,7 @@ export const MonitorPage: React.FC = () => {
           </p>
           <button
             onClick={() => setManageFavoritesOpen(true)}
-            className="cursor-pointer flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+            className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
           >
             <Star className="w-4 h-4" />
             Manage Favorites
@@ -407,7 +407,7 @@ export const MonitorPage: React.FC = () => {
             </h2>
             <button
               onClick={() => setManageFavoritesOpen(true)}
-              className="cursor-pointer flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent transition-colors"
             >
               <Settings className="w-4 h-4" />
               Manage Favorites
@@ -481,21 +481,59 @@ export const MonitorPage: React.FC = () => {
                     </div>
 
                     {/* App Features Section */}
-                    {streamerAssignments[camera.streamerUuid] && streamerAssignments[camera.streamerUuid].length > 0 && (
-                      <div className="space-y-3">
-                        {(() => {
-                          const activeAssignments = streamerAssignments[camera.streamerUuid]
-                            .filter(assignment => assignment.is_active === 'true' || assignment.is_active === '1');
-                          
-                          const groupedApps = activeAssignments.reduce((acc, assignment) => {
-                            if (!acc[assignment.app_name]) {
-                              acc[assignment.app_name] = [];
-                            }
-                            acc[assignment.app_name].push(assignment.app_config_template_name);
-                            return acc;
-                          }, {} as Record<string, string[]>);
+                    {(() => {
+                      const hasAssignments = streamerAssignments[camera.streamerUuid] && streamerAssignments[camera.streamerUuid].length > 0;
+                      const activeAssignments = hasAssignments 
+                        ? streamerAssignments[camera.streamerUuid].filter(assignment => assignment.is_active === 'true' || assignment.is_active === '1')
+                        : [];
+                      
+                      if (!hasAssignments || activeAssignments.length === 0) {
+                        return (
+                          <div className={`rounded-lg border p-4 text-center ${
+                            theme === 'dark' ? 'bg-gray-900/30 border-gray-700' : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <div className="flex flex-col items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${
+                                theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'
+                              }`} />
+                              <span className={`text-sm font-medium ${
+                                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
+                                No apps assigned
+                              </span>
+                              <p className={`text-xs ${
+                                theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
+                              }`}>
+                                Configure apps in the{' '}
+                                <button
+                                  onClick={() => navigate('/apps')}
+                                  className={`underline hover:no-underline transition-all ${
+                                    theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'
+                                  }`}
+                                >
+                                  Apps page
+                                </button>
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <div className="space-y-3">
+                          {(() => {
+                            const groupedApps = activeAssignments.reduce((acc, assignment) => {
+                              if (!acc[assignment.app_name]) {
+                                acc[assignment.app_name] = [];
+                              }
+                              acc[assignment.app_name].push(assignment.app_config_template_name);
+                              return acc;
+                            }, {} as Record<string, string[]>);
 
-                          return Object.entries(groupedApps).map(([appName]) => (
+                            // Sort apps alphabetically
+                            return Object.entries(groupedApps)
+                              .sort(([appNameA], [appNameB]) => appNameA.localeCompare(appNameB))
+                              .map(([appName]) => (
                             <div key={appName} className={`rounded-lg border p-3 ${
                               theme === 'dark' ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'
                             }`}>
@@ -585,11 +623,11 @@ export const MonitorPage: React.FC = () => {
                                   return buttons;
                                 })()}
                               </div>
-                            </div>
-                          ));
-                        })()}
-                      </div>
-                    )}
+                            </div>                              ));
+                          })()}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

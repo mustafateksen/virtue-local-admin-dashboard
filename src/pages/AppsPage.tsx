@@ -202,22 +202,23 @@ export const AppsPage: React.FC = () => {
   const { theme } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Use centralized hook for all compute unit and camera data
-  const { computeUnits, lastSyncTime, refresh } = useComputeUnitStatus({
-    componentName: 'AppsPage',
-    pollingInterval: 6000,    // Check every 6 seconds
-    autoCheckInterval: 8000,  // Ping every 8 seconds
-    enableAutoCheck: true,
-    enablePolling: true,
-    enableVisibilityRefresh: true,
-  });
-  
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<{
     camera: any;
     unit: any;
   } | null>(null);
+  
+  // Use centralized hook for all compute unit and camera data
+  // Disable polling when modal is open to prevent modal reset
+  const { computeUnits, lastSyncTime } = useComputeUnitStatus({
+    componentName: 'AppsPage',
+    pollingInterval: 6000,    // Check every 6 seconds
+    autoCheckInterval: 8000,  // Ping every 8 seconds
+    enableAutoCheck: !modalOpen,  // Disable when modal is open
+    enablePolling: !modalOpen,    // Disable when modal is open
+    enableVisibilityRefresh: !modalOpen,  // Disable when modal is open
+  });
 
   // Format last sync time for display
   const formatLastSync = (date: Date | null) => {
@@ -251,7 +252,15 @@ export const AppsPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedApp, setSelectedApp] = useState<string>('');
     const [selectedResults, setSelectedResults] = useState<string[]>([]);
+    
+    // Local state for features to enable real-time updates in modal
+    const [localFeatures, setLocalFeatures] = useState<string[]>(selectedFeatures);
     const { theme } = useTheme();
+
+    // Update local features when selectedFeatures prop changes
+    useEffect(() => {
+      setLocalFeatures(selectedFeatures);
+    }, [selectedFeatures]);
 
     // Load supported apps and current assignments when modal opens
     useEffect(() => {
@@ -367,9 +376,19 @@ export const AppsPage: React.FC = () => {
         console.log(`✅ [Modal] Updated features for streamer ${streamerUuid}:`, features);
         onFeaturesChange(features);
         
+        // Also update local features immediately for modal display
+        setLocalFeatures(features);
+        console.log(`🔄 [Modal] Updated local features in modal:`, features);
+        
         // Reset form
         setSelectedApp('');
         setSelectedResults([]);
+        
+        // Close modal after successful addition
+        setTimeout(() => {
+          console.log('🎉 [Modal] Features added successfully, closing modal...');
+          onClose();
+        }, 500);
         
       } catch (error) {
         console.error('❌ [Modal] Failed to add features:', error);
@@ -424,6 +443,14 @@ export const AppsPage: React.FC = () => {
           .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
         console.log(`✅ [Modal] Updated features for streamer ${streamerUuid}:`, features);
         onFeaturesChange(features);
+        
+        // Also update local features immediately for modal display
+        setLocalFeatures(features);
+        console.log(`🔄 [Modal] Updated local features in modal after removal:`, features);
+        
+        // Also update the selectedFeatures immediately for modal display
+        // This ensures the UI updates instantly without waiting for parent refresh
+        console.log(`🔄 [Modal] Updating modal display with new features list`);
         
       } catch (error) {
         console.error('❌ [Modal] Failed to remove feature:', error);
@@ -615,13 +642,13 @@ export const AppsPage: React.FC = () => {
             )}
 
             {/* Currently Selected Features */}
-            {selectedFeatures.length > 0 && (
+            {localFeatures.length > 0 && (
               <div>
                 <h3 className={`text-sm font-medium ${textColor} mb-3`}>
-                  Currently Active Features ({selectedFeatures.length})
+                  Currently Active Features ({localFeatures.length})
                 </h3>
                 <div className="space-y-2">
-                  {selectedFeatures.map((feature) => {
+                  {localFeatures.map((feature) => {
                     const [appName, resultName] = feature.split('.', 2);
                     return (
                       <div
@@ -756,7 +783,7 @@ export const AppsPage: React.FC = () => {
   const onlineUnits = computeUnits.filter(unit => unit.status === 'online').length;
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
         <div>
@@ -893,10 +920,14 @@ export const AppsPage: React.FC = () => {
                             return acc;
                           }, {} as Record<string, string[]>);
 
-                          return Object.entries(groupedFeatures).map(([appName, results]) => {
+                          // Sort app entries alphabetically by app name
+                          return Object.entries(groupedFeatures)
+                            .sort(([appNameA], [appNameB]) => appNameA.localeCompare(appNameB))
+                            .map(([appName, results]) => {
                             // Get consistent color scheme for this app across all cameras
                             const colorScheme = getAppColorScheme(appName);
-                            const resultsArray = results as string[];
+                            // Sort results alphabetically
+                            const resultsArray = (results as string[]).sort((a, b) => a.localeCompare(b));
                             return (
                               <div key={appName} className="space-y-2">
                                 {/* App Name Header */}
@@ -987,10 +1018,10 @@ export const AppsPage: React.FC = () => {
             setModalOpen(false);
             setSelectedCamera(null);
             
-            // Wait a bit before the next polling cycle to ensure backend is consistent
+            // Wait a bit for modal state to settle before re-enabling polling
             setTimeout(() => {
-              console.log('⏰ Modal closed, next polling cycle will begin soon...');
-            }, 2000);
+              console.log('⏰ Modal closed, polling will resume automatically...');
+            }, 1000);
           }}
           cameraName={selectedCamera.camera.name}
           computeUnitIP={selectedCamera.unit.ipAddress}
@@ -1006,9 +1037,9 @@ export const AppsPage: React.FC = () => {
               computeUnitIP: selectedCamera.unit.ipAddress
             });
             
-            // The centralized hook will automatically update the state via polling
-            // No need to manually update state here - just trigger a refresh to sync faster
-            refresh();
+            // Don't trigger refresh while modal is open
+            // The polling will automatically sync when modal closes
+            console.log('✨ [Main] Features updated, polling will sync automatically when modal closes');
           }}
         />
       )}

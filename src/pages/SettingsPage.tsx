@@ -351,7 +351,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="space-y-4 lg:space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl xl:text-4xl font-bold text-foreground">Settings</h1>

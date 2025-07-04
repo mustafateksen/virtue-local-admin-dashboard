@@ -49,5 +49,68 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Global interactive elements cursor pointer plugin
+    function({ addBase }) {
+      addBase({
+        // Buttons
+        'button': {
+          cursor: 'pointer',
+        },
+        'button:disabled, button[disabled]': {
+          cursor: 'not-allowed',
+        },
+        '[role="button"]': {
+          cursor: 'pointer',
+        },
+        
+        // Dropdowns and selects
+        'select': {
+          cursor: 'pointer',
+        },
+        'option': {
+          cursor: 'pointer',
+        },
+        
+        // Interactive roles
+        '[role="combobox"]': {
+          cursor: 'pointer',
+        },
+        '[role="listbox"]': {
+          cursor: 'pointer',
+        },
+        '[role="option"]': {
+          cursor: 'pointer',
+        },
+        '[role="menuitem"]': {
+          cursor: 'pointer',
+        },
+        '[role="tab"]': {
+          cursor: 'pointer',
+        },
+        '[role="tabpanel"]': {
+          cursor: 'pointer',
+        },
+        
+        // Form elements
+        'input[type="checkbox"]': {
+          cursor: 'pointer',
+        },
+        'input[type="radio"]': {
+          cursor: 'pointer',
+        },
+        'label': {
+          cursor: 'pointer',
+        },
+        
+        // Clickable elements
+        '[onclick]': {
+          cursor: 'pointer',
+        },
+        'a[role="button"]': {
+          cursor: 'pointer',
+        },
+      })
+    }
+  ],
 }
