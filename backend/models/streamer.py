@@ -7,6 +7,7 @@ class Streamer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     streamer_uuid = db.Column(db.String(100), unique=True, nullable=False)
     streamer_type = db.Column(db.String(50), nullable=False)  # camera, io, etc.
+    streamer_type_uuid = db.Column(db.String(100), nullable=True)  # UUID for the streamer type
     streamer_hr_name = db.Column(db.String(100), nullable=False)
     config_template_name = db.Column(db.String(100), nullable=False)
     is_alive = db.Column(db.String(10), default='false')
@@ -18,11 +19,12 @@ class Streamer(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
-    def __init__(self, streamer_uuid=None, streamer_type=None, streamer_hr_name=None, 
-                 config_template_name=None, is_alive='false', ip_address=None, 
-                 compute_unit_id=None, status='inactive', features=None):
+    def __init__(self, streamer_uuid=None, streamer_type=None, streamer_type_uuid=None, 
+                 streamer_hr_name=None, config_template_name=None, is_alive='false', 
+                 ip_address=None, compute_unit_id=None, status='inactive', features=None):
         self.streamer_uuid = streamer_uuid
         self.streamer_type = streamer_type
+        self.streamer_type_uuid = streamer_type_uuid or 'camera'  # Default to 'camera'
         self.streamer_hr_name = streamer_hr_name
         self.config_template_name = config_template_name
         self.is_alive = is_alive
@@ -51,6 +53,7 @@ class Streamer(db.Model):
             'features': features_list,
             'streamer_uuid': self.streamer_uuid,  # Keep legacy field for compatibility
             'streamer_type': self.streamer_type,
+            'streamer_type_uuid': self.streamer_type_uuid or 'camera',
             'streamer_hr_name': self.streamer_hr_name,
             'config_template_name': self.config_template_name,
             'is_alive': self.is_alive,

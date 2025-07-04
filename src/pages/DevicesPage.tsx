@@ -56,6 +56,52 @@ const deleteComputeUnitFromBackend = async (unitId: string): Promise<boolean> =>
   }
 };
 
+// Update functions
+const updateComputeUnitName = async (unitId: string, newName: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/compute_units/${unitId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to update compute unit name:', error);
+    return false;
+  }
+};
+
+const updateCameraName = async (streamerUuid: string, newName: string): Promise<boolean> => {
+  try {
+    console.log('🌐 Making API request to update camera name:', {
+      url: `${API_BASE_URL}/api/streamers/${streamerUuid}/name`,
+      payload: { name: newName }
+    });
+    
+    const response = await fetch(`${API_BASE_URL}/api/streamers/${streamerUuid}/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    });
+    
+    console.log('🌐 API Response:', {
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🌐 API Error response:', errorText);
+    }
+    
+    return response.ok;
+  } catch (error) {
+    console.error('🌐 Network error updating camera name:', error);
+    return false;
+  }
+};
+
 export const DevicesPage: React.FC = () => {
   const { theme } = useTheme();
   const { favoriteStreamers, addToFavorites, removeFromFavorites, isFavorite, removeFavoritesByComputeUnitIP } = useFavorites();
@@ -65,6 +111,12 @@ export const DevicesPage: React.FC = () => {
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceIP, setNewDeviceIP] = useState('');
   const [addingDevice, setAddingDevice] = useState(false);
+  
+  // Edit state
+  const [editingUnit, setEditingUnit] = useState<string | null>(null);
+  const [editingCamera, setEditingCamera] = useState<string | null>(null);
+  const [editingUnitName, setEditingUnitName] = useState('');
+  const [editingCameraName, setEditingCameraName] = useState('');
   
   // Use centralized hook for all compute unit and camera data
   // Disable polling when add form is open to prevent interference
@@ -177,6 +229,68 @@ export const DevicesPage: React.FC = () => {
     }
   };
 
+  // Edit handlers
+  const handleUnitNameEdit = (unitId: string, currentName: string) => {
+    setEditingUnit(unitId);
+    setEditingUnitName(currentName);
+  };
+
+  const handleUnitNameSave = async (unitId: string) => {
+    if (editingUnitName.trim() && editingUnitName.trim() !== '') {
+      const success = await updateComputeUnitName(unitId, editingUnitName.trim());
+      if (success) {
+        await refresh();
+      } else {
+        alert('Failed to update compute unit name');
+      }
+    }
+    
+    // Always clear edit state regardless of success/failure
+    setEditingUnit(null);
+    setEditingUnitName('');
+  };
+
+  const handleUnitNameCancel = () => {
+    setEditingUnit(null);
+    setEditingUnitName('');
+  };
+
+  const handleCameraNameEdit = (streamerUuid: string, currentName: string) => {
+    setEditingCamera(streamerUuid);
+    setEditingCameraName(currentName);
+  };
+
+  const handleCameraNameSave = async (streamerUuid: string) => {
+    if (editingCameraName.trim() && editingCameraName.trim() !== '') {
+      console.log('🔧 Updating camera name:', {
+        streamerUuid,
+        newName: editingCameraName.trim()
+      });
+      
+      const success = await updateCameraName(streamerUuid, editingCameraName.trim());
+      console.log('🔧 Update result:', success);
+      
+      if (success) {
+        console.log('✅ Camera name updated successfully, refreshing...');
+        await refresh();
+      } else {
+        console.error('❌ Failed to update camera name');
+        alert('Failed to update camera name');
+      }
+    } else {
+      console.log('🔧 Camera name is empty or unchanged, canceling edit');
+    }
+    
+    // Always clear edit state regardless of success/failure
+    setEditingCamera(null);
+    setEditingCameraName('');
+  };
+
+  const handleCameraNameCancel = () => {
+    setEditingCamera(null);
+    setEditingCameraName('');
+  };
+
   // Check if camera is favorited
   const isCameraFavorited = (cameraUuid: string) => {
     return isFavorite(cameraUuid);
@@ -232,12 +346,7 @@ export const DevicesPage: React.FC = () => {
           <AlertTriangle className="w-12 h-12 mx-auto text-red-500 mb-4" />
           <h2 className="text-xl font-semibold text-foreground">Failed to load devices</h2>
           <p className="text-muted-foreground mt-2">{error}</p>
-          <button
-            onClick={() => refresh()}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            Retry
-          </button>
+          <p className="text-sm text-muted-foreground mt-2">System will automatically retry...</p>
         </div>
       </div>
     );
@@ -258,14 +367,6 @@ export const DevicesPage: React.FC = () => {
             {loading && <RefreshCw className="h-4 w-4 animate-spin mr-2 inline" />}
             Last updated: {formatLastSync(lastSyncTime)}
           </span>
-          <button
-            onClick={() => refresh()}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
@@ -371,7 +472,28 @@ export const DevicesPage: React.FC = () => {
                     <Settings className={`w-8 h-8 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-foreground">{unit.name}</h3>
+                    {editingUnit === unit.id ? (
+                      <input
+                        type="text"
+                        value={editingUnitName}
+                        onChange={(e) => setEditingUnitName(e.target.value)}
+                        className="text-lg font-semibold bg-background border border-border rounded px-2 py-1 text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUnitNameSave(unit.id);
+                          if (e.key === 'Escape') handleUnitNameCancel();
+                        }}
+                        onBlur={() => handleUnitNameSave(unit.id)}
+                        autoFocus
+                      />
+                    ) : (
+                      <h3 
+                        className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => handleUnitNameEdit(unit.id, unit.name)}
+                        title="Click to edit name"
+                      >
+                        {unit.name}
+                      </h3>
+                    )}
                     <p className="text-sm text-muted-foreground font-mono">{unit.ipAddress}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {unit.cameras.length} camera{unit.cameras.length !== 1 ? 's' : ''} 
@@ -405,11 +527,32 @@ export const DevicesPage: React.FC = () => {
                       return (
                         <div key={camera.id} className="bg-secondary/50 border border-border rounded-lg p-4">
                           <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Camera className="w-5 h-5 text-muted-foreground" />
-                              <span className="font-medium text-foreground text-sm">{camera.name}</span>
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Camera className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                              {editingCamera === camera.streamerUuid ? (
+                                <input
+                                  type="text"
+                                  value={editingCameraName}
+                                  onChange={(e) => setEditingCameraName(e.target.value)}
+                                  className="text-sm font-medium bg-background border border-border rounded px-2 py-1 text-foreground focus:ring-1 focus:ring-primary focus:border-primary flex-1 min-w-0"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleCameraNameSave(camera.streamerUuid);
+                                    if (e.key === 'Escape') handleCameraNameCancel();
+                                  }}
+                                  onBlur={() => handleCameraNameSave(camera.streamerUuid)}
+                                  autoFocus
+                                />
+                              ) : (
+                                <span 
+                                  className="font-medium text-foreground text-sm truncate cursor-pointer hover:text-primary transition-colors"
+                                  onClick={() => handleCameraNameEdit(camera.streamerUuid, camera.name)}
+                                  title="Click to edit name"
+                                >
+                                  {camera.name}
+                                </span>
+                              )}
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                               <button
                                 onClick={() => toggleCameraFavorite(camera, unit.ipAddress)}
                                 className={`p-1 rounded transition-colors ${

@@ -514,7 +514,7 @@ export const MonitorPage: React.FC = () => {
                               </div>
 
                               {/* Feature Buttons */}
-                              <div className="flex flex-wrap gap-2">
+                              <div className="space-y-2">
                                 {(() => {
                                   const buttons = [];
                                   
@@ -522,7 +522,7 @@ export const MonitorPage: React.FC = () => {
                                     buttons.push(
                                       <button
                                         key="logs"
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                        className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
                                           theme === 'dark' 
                                             ? 'bg-blue-900/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/60 hover:border-blue-700' 
                                             : 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 hover:border-blue-400'
@@ -532,20 +532,20 @@ export const MonitorPage: React.FC = () => {
                                           navigate(`/logs?streamerUuid=${camera.streamerUuid}&computeUnitIP=${camera.computeUnitIP}&streamerName=${encodeURIComponent(displayData.streamerHrName)}`);
                                         }}
                                       >
-                                        <BarChart3 className="w-3 h-3" /> Logs
+                                        <BarChart3 className="w-4 h-4" /> View Logs
                                       </button>
                                     );
                                     buttons.push(
                                       <button
                                         key="memory"
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                        className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
                                           theme === 'dark' 
                                             ? 'bg-purple-900/40 text-purple-300 border border-purple-800/50 hover:bg-purple-900/60 hover:border-purple-700' 
                                             : 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 hover:border-purple-400'
                                         }`}
                                         onClick={() => console.log(`Opening memory for ${displayData.streamerHrName} - ${appName}`)}
                                       >
-                                        <Brain className="w-3 h-3" /> Memory
+                                        <Brain className="w-4 h-4" /> View Memory
                                       </button>
                                     );
                                   }
@@ -554,14 +554,14 @@ export const MonitorPage: React.FC = () => {
                                     buttons.push(
                                       <button
                                         key="text-scans"
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                        className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
                                           theme === 'dark' 
                                             ? 'bg-green-900/40 text-green-300 border border-green-800/50 hover:bg-green-900/60 hover:border-green-700' 
                                             : 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 hover:border-green-400'
                                         }`}
                                         onClick={() => console.log(`Opening text scans for ${displayData.streamerHrName} - ${appName}`)}
                                       >
-                                        <FileText className="w-3 h-3" /> Text Scans
+                                        <FileText className="w-4 h-4" /> View Text Scans
                                       </button>
                                     );
                                   }
@@ -570,14 +570,14 @@ export const MonitorPage: React.FC = () => {
                                     buttons.push(
                                       <button
                                         key="scans"
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                                        className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
                                           theme === 'dark' 
                                             ? 'bg-orange-900/40 text-orange-300 border border-orange-800/50 hover:bg-orange-900/60 hover:border-orange-700' 
                                             : 'bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 hover:border-orange-400'
                                         }`}
                                         onClick={() => console.log(`Opening scans for ${displayData.streamerHrName} - ${appName}`)}
                                       >
-                                        <ScanLine className="w-3 h-3" /> Scans
+                                        <ScanLine className="w-4 h-4" /> View Scans
                                       </button>
                                     );
                                   }

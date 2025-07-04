@@ -9,7 +9,7 @@ export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   
   // Use the centralized hook for consistent data across all pages
-  const { computeUnits, loading, lastSyncTime, error, refresh } = useComputeUnitStatus({
+  const { computeUnits, loading, lastSyncTime, error } = useComputeUnitStatus({
     componentName: 'Dashboard',
     pollingInterval: 6000,    // Check every 6 seconds
     autoCheckInterval: 8000,  // Ping every 8 seconds
@@ -50,12 +50,7 @@ export const DashboardPage: React.FC = () => {
           <AlertTriangle className="w-12 h-12 mx-auto text-red-500 mb-4" />
           <h2 className="text-xl font-semibold text-foreground">Failed to load dashboard</h2>
           <p className="text-muted-foreground mt-2">{error}</p>
-          <button
-            onClick={() => refresh()}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            Retry
-          </button>
+          <p className="text-sm text-muted-foreground mt-2">System will automatically retry...</p>
         </div>
       </div>
     );
@@ -71,19 +66,11 @@ export const DashboardPage: React.FC = () => {
             Overview of your Main Terminal Cluster and System status
           </p>
         </div>
-        <div className="flex items-center gap-4 mt-4 sm:mt-0">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 mt-4 sm:mt-0">
+          <span className="text-xs sm:text-sm text-muted-foreground">
             {loading && <RefreshCw className="h-4 w-4 animate-spin mr-2 inline" />}
             Last updated: {formatLastSync(lastSyncTime)}
           </span>
-          <button
-            onClick={() => refresh()}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
       </div>
 

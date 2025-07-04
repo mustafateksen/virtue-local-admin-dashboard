@@ -203,7 +203,7 @@ export const AppsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Use centralized hook for all compute unit and camera data
-  const { computeUnits, loading, lastSyncTime, refresh } = useComputeUnitStatus({
+  const { computeUnits, lastSyncTime, refresh } = useComputeUnitStatus({
     componentName: 'AppsPage',
     pollingInterval: 6000,    // Check every 6 seconds
     autoCheckInterval: 8000,  // Ping every 8 seconds
@@ -774,15 +774,6 @@ export const AppsPage: React.FC = () => {
             )}
           </div>
         </div>
-
-        <button
-          onClick={() => refresh()}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </button>
       </div>
 
       {/* Search */}

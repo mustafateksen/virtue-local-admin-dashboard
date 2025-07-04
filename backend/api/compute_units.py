@@ -74,6 +74,9 @@ class ComputeUnitsResource(Resource):
                 
                 logger.info(f"Found {len(cameras)} cameras for unit {unit.ip_address}")
                 
+                # Also fetch app assignments to populate features
+                assignments_data = self._fetch_app_assignments(unit.ip_address)
+                
                 # Update/create streamers in database
                 for camera_data in cameras:
                     streamer_uuid = camera_data.get('streamer_uuid')
@@ -102,8 +105,8 @@ class ComputeUnitsResource(Resource):
                     streamer.compute_unit_id = unit.id
                     streamer.last_seen = datetime.datetime.utcnow()
                     
-                    # Store features as JSON string
-                    features = camera_data.get('features', [])
+                    # Convert app assignments to features format for this streamer
+                    features = self._convert_assignments_to_features(streamer_uuid, assignments_data)
                     streamer.features = json.dumps(features) if features else None
                 
                 # Mark unit as online
@@ -170,6 +173,42 @@ class ComputeUnitsResource(Resource):
     def options(self):
         """Handle CORS preflight for compute units endpoint"""
         return {}, 200
+
+    def _fetch_app_assignments(self, compute_unit_ip):
+        """Fetch app assignments from compute unit"""
+        try:
+            # Check if port is already included in the IP
+            if ':' in compute_unit_ip:
+                ai_url = f"http://{compute_unit_ip}/apps/public/get_streamer_app_assignments"
+            else:
+                ai_url = f"http://{compute_unit_ip}:8000/apps/public/get_streamer_app_assignments"
+            
+            response = requests.get(ai_url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('assignments', [])
+            else:
+                logger.warning(f"Failed to fetch app assignments from {compute_unit_ip}: HTTP {response.status_code}")
+                return []
+        except Exception as e:
+            logger.warning(f"Error fetching app assignments from {compute_unit_ip}: {e}")
+            return []
+    
+    def _convert_assignments_to_features(self, streamer_uuid, assignments_data):
+        """Convert app assignments to features format (app_name.result_name)"""
+        features = []
+        
+        for assignment in assignments_data:
+            if (assignment.get('streamer_uuid') == streamer_uuid and 
+                assignment.get('is_active') == 'true'):
+                app_name = assignment.get('app_name', '')
+                result_name = assignment.get('app_config_template_name', '')
+                if app_name and result_name:
+                    feature = f"{app_name}.{result_name}"
+                    features.append(feature)
+        
+        logger.info(f"Converted {len(features)} assignments to features for streamer {streamer_uuid}: {features}")
+        return features
 
 
 class ComputeUnitStatusResource(Resource):
@@ -242,7 +281,7 @@ class ComputeUnitResource(Resource):
             return {'message': 'Failed to delete compute unit'}, 500
     
     def put(self, unit_id):
-        """Update compute unit status"""
+        """Update compute unit name and/or status"""
         try:
             compute_unit = ComputeUnit.query.get(unit_id)
             if not compute_unit:
@@ -253,7 +292,9 @@ class ComputeUnitResource(Resource):
                 if 'status' in data:
                     compute_unit.status = data['status']
                 if 'name' in data:
+                    old_name = compute_unit.name
                     compute_unit.name = data['name']
+                    logger.info(f"Updated compute unit name: {old_name} -> {compute_unit.name}")
                 
                 compute_unit.updated_at = datetime.datetime.utcnow()
                 if data.get('status') == 'online':
@@ -271,12 +312,6 @@ class ComputeUnitResource(Resource):
     def options(self, unit_id):
         """Handle CORS preflight for compute unit endpoint"""
         return {}, 200
-
-
-# Register resources with the API
-compute_units_api.add_resource(ComputeUnitsResource, '/api/compute_units')
-compute_units_api.add_resource(ComputeUnitResource, '/api/compute_units/<int:unit_id>')
-compute_units_api.add_resource(ComputeUnitStatusResource, '/api/compute_units/<int:unit_id>/status')
 
 
 class ComputeUnitCamerasResource(Resource):
@@ -319,5 +354,46 @@ class ComputeUnitCamerasResource(Resource):
             return {'message': 'Failed to sync cameras'}, 500
 
 
-# Register the new cameras endpoint
-compute_units_api.add_resource(ComputeUnitCamerasResource, '/api/compute_units/<int:unit_id>/cameras')
+class StreamerResource(Resource):
+    def put(self, streamer_uuid):
+        """Update streamer name"""
+        try:
+            logger.info(f"🔧 Received PUT request for streamer: {streamer_uuid}")
+            
+            streamer = Streamer.query.filter_by(streamer_uuid=streamer_uuid).first()
+            if not streamer:
+                logger.warning(f"🔧 Streamer not found: {streamer_uuid}")
+                return {'message': 'Streamer not found'}, 404
+            
+            data = request.get_json()
+            logger.info(f"🔧 Request data: {data}")
+            
+            if not data or 'name' not in data:
+                logger.warning(f"🔧 Invalid request data: {data}")
+                return {'message': 'Name is required'}, 400
+            
+            old_name = streamer.streamer_hr_name
+            new_name = data['name']
+            
+            logger.info(f"🔧 Updating streamer name: '{old_name}' -> '{new_name}'")
+            
+            streamer.streamer_hr_name = new_name
+            streamer.updated_at = datetime.datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"✅ Successfully updated streamer name: {old_name} -> {streamer.streamer_hr_name}")
+            return {'streamer': streamer.to_dict()}, 200
+            
+        except Exception as e:
+            logger.error(f"Error updating streamer name: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to update streamer name'}, 500
+
+
+# Register the API resources
+compute_units_api.add_resource(ComputeUnitsResource, '/api/compute_units')
+compute_units_api.add_resource(ComputeUnitStatusResource, '/api/compute_units/<string:unit_id>/status')
+compute_units_api.add_resource(ComputeUnitResource, '/api/compute_units/<string:unit_id>')
+compute_units_api.add_resource(ComputeUnitCamerasResource, '/api/compute_units/<string:unit_id>/cameras')
+compute_units_api.add_resource(StreamerResource, '/api/streamers/<string:streamer_uuid>')

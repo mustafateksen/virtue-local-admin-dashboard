@@ -288,6 +288,19 @@ def update_streamer_name():
         response = requests.put(ai_service_endpoint, json=ai_service_data, timeout=10)
         response.raise_for_status()
         
+        # Also update the streamer name in our local database
+        try:
+            streamer = Streamer.query.filter_by(streamer_uuid=data['streamer_uuid']).first()
+            if streamer:
+                streamer.streamer_hr_name = data['streamer_hr_name']
+                db.session.commit()
+                logger.info(f"Updated streamer name in local database: {data['streamer_hr_name']}")
+            else:
+                logger.warning(f"Streamer with UUID {data['streamer_uuid']} not found in local database")
+        except Exception as db_error:
+            logger.error(f"Failed to update streamer name in local database: {db_error}")
+            # Don't fail the whole request if database update fails
+        
         logger.info(f"Streamer name updated successfully: {data['streamer_hr_name']}")
         
         return jsonify({
@@ -300,6 +313,80 @@ def update_streamer_name():
         error_msg = f"Failed to update streamer name via AI service: {e}"
         logger.error(error_msg)
         return jsonify({'error': error_msg}), 503
+    except Exception as e:
+        error_msg = f"Error updating streamer name: {e}"
+        logger.error(error_msg)
+        return jsonify({'error': error_msg}), 500
+
+
+@streamers_bp.route('/<streamer_uuid>/name', methods=['PUT'])
+def update_streamer_name_simple(streamer_uuid):
+    """Simple endpoint to update streamer name in our database and sync to compute unit"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'name' not in data:
+            return jsonify({'error': 'Name is required'}), 400
+            
+        new_name = data['name']
+        
+        # Find the streamer in our database
+        streamer = Streamer.query.filter_by(streamer_uuid=streamer_uuid).first()
+        if not streamer:
+            return jsonify({'error': 'Streamer not found'}), 404
+            
+        # Get the compute unit info
+        compute_unit = streamer.compute_unit
+        if not compute_unit:
+            return jsonify({'error': 'Compute unit not found for this streamer'}), 404
+            
+        old_name = streamer.streamer_hr_name
+        
+        # Try to update the streamer name on the compute unit first
+        try:
+            if compute_unit.status == 'online':
+                # Prepare data for AI service in the correct format
+                ai_service_data = {
+                    "manuel_timestamp": datetime.datetime.now().isoformat(),
+                    "streamer_uuid": streamer_uuid,
+                    "streamer_type_uuid": streamer.streamer_type_uuid or "camera",
+                    "streamer_hr_name": new_name,
+                    "config_template_name": streamer.config_template_name or "default",
+                    "is_alive": "1" if streamer.is_alive == "1" else "0"
+                }
+                
+                # Make request to AI service
+                base_ip = compute_unit.ip_address.split(':')[0] if ':' in compute_unit.ip_address else compute_unit.ip_address
+                ai_service_endpoint = f"http://{base_ip}:8000/streamers/private/update_streamer_info"
+                
+                logger.info(f"Updating streamer name via AI service: {ai_service_endpoint}")
+                logger.info(f"Request data: {ai_service_data}")
+                
+                response = requests.put(ai_service_endpoint, json=ai_service_data, timeout=10)
+                
+                if response.ok:
+                    logger.info(f"Successfully updated streamer name on compute unit: {old_name} -> {new_name}")
+                else:
+                    logger.warning(f"Failed to update streamer name on compute unit (status: {response.status_code}), but will update local database")
+            else:
+                logger.info(f"Compute unit is offline, updating only local database: {old_name} -> {new_name}")
+                
+        except Exception as sync_error:
+            logger.warning(f"Failed to sync streamer name to compute unit: {sync_error}, but will update local database")
+        
+        # Update the streamer name in our local database
+        streamer.streamer_hr_name = new_name
+        db.session.commit()
+        
+        logger.info(f"Updated streamer name in database: {old_name} -> {new_name}")
+        
+        return jsonify({
+            'message': 'Streamer name updated successfully',
+            'streamer_uuid': streamer_uuid,
+            'new_name': new_name,
+            'old_name': old_name
+        }), 200
+        
     except Exception as e:
         error_msg = f"Error updating streamer name: {e}"
         logger.error(error_msg)
