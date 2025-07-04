@@ -3,6 +3,7 @@ import { Cctv, X, Play, Square, Settings, Star, FileText, Brain, ScanLine, BarCh
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { ManageFavoritesModal } from '../components/ManageFavoritesModal';
+import { useNavigate } from 'react-router-dom';
 import cam1image from '../assets/cam1.png';
 
 // Get dynamic API base URL based on current window location
@@ -103,6 +104,7 @@ const fetchLastFrame = async (computeUnitIP: string, streamerUuid: string): Prom
 export const MonitorPage: React.FC = () => {
   const { theme } = useTheme();
   const { favoriteStreamers, refreshFavorites } = useFavorites(); // Add refreshFavorites
+  const navigate = useNavigate();
   const [learning, setLearning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -554,7 +556,10 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-blue-900/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/60 hover:border-blue-700' 
                                             : 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 hover:border-blue-400'
                                         }`}
-                                        onClick={() => console.log(`Opening logs for ${displayData.streamerHrName} - ${appName}`)}
+                                        onClick={() => {
+                                          console.log(`Opening logs for ${displayData.streamerHrName} - ${appName}`);
+                                          navigate(`/logs?streamerUuid=${streamer.streamerUuid}&computeUnitIP=${streamer.computeUnitIP}&streamerName=${encodeURIComponent(displayData.streamerHrName)}`);
+                                        }}
                                       >
                                         <BarChart3 className="w-3 h-3" /> Logs
                                       </button>

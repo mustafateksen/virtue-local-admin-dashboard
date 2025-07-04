@@ -7,6 +7,7 @@ from .favorites import favorites_bp
 from .cameras import cameras_bp
 from .apps import apps_bp
 from .system import system_bp
+from .anomaly_logs import anomaly_logs_bp
 
 def register_blueprints(app):
     """Register all API blueprints with the Flask app"""
@@ -18,5 +19,6 @@ def register_blueprints(app):
     app.register_blueprint(cameras_bp)
     app.register_blueprint(apps_bp)
     app.register_blueprint(system_bp)
+    app.register_blueprint(anomaly_logs_bp)
 
 __all__ = ['register_blueprints']
