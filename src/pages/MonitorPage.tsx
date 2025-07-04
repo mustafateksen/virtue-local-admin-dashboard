@@ -581,7 +581,7 @@ export const MonitorPage: React.FC = () => {
                                             ? 'bg-purple-900/40 text-purple-300 border border-purple-800/50 hover:bg-purple-900/60 hover:border-purple-700' 
                                             : 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 hover:border-purple-400'
                                         }`}
-                                        onClick={() => console.log(`Opening memory for ${displayData.streamerHrName} - ${appName}`)}
+                                        onClick={() => navigate(`/learned-products?streamerUuid=${encodeURIComponent(camera.streamerUuid)}&computeUnitIP=${encodeURIComponent(camera.computeUnitIP)}&streamerName=${encodeURIComponent(displayData.streamerHrName)}&appName=${encodeURIComponent(appName)}`)}
                                       >
                                         <Brain className="w-4 h-4" /> View Memory
                                       </button>
