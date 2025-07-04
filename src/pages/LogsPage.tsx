@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Star, StarOff, Trash2, AlertTriangle, Clock, Eye, Download, Filter, Search } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+// import { useCustomAlert } from '../hooks/useCustomAlert';
+// import { CustomAlert } from '../components/CustomAlert';
 
 // Get dynamic API base URL based on current window location
 function getAPIBaseURL(): string {
@@ -30,7 +32,7 @@ interface AnomalyLog {
   streamer_uuid: string;
   anomaly_uuid: string;
   is_starred: string;
-  file_path: string;
+  // Note: file_path is deprecated - we now use anomaly_uuid for image fetching
 }
 
 interface AnomalyLogsResponse {
@@ -41,6 +43,7 @@ export const LogsPage: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // const { alertState, showSuccess, showError, showConfirm, closeAlert } = useCustomAlert();
   
   // Get parameters from URL
   const streamerUuid = searchParams.get('streamerUuid') || '';
@@ -56,16 +59,16 @@ export const LogsPage: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  // Generate image URL for anomaly log - use backend proxy endpoint
-  const getImageUrl = (filePath: string) => {
-    // Use backend proxy to serve images from compute unit
-    return `${API_BASE_URL}/api/anomaly_logs/image?compute_unit_ip=${encodeURIComponent(computeUnitIP)}&file_path=${encodeURIComponent(filePath)}`;
+  // Generate image URL for anomaly log - use new base64 endpoint with anomaly_uuid
+  const getImageUrl = (anomalyUuid: string) => {
+    // Use backend endpoint that fetches base64 image from compute unit
+    return `${API_BASE_URL}/api/anomaly_logs/image?compute_unit_ip=${encodeURIComponent(computeUnitIP)}&anomaly_uuid=${encodeURIComponent(anomalyUuid)}`;
   };
 
   // Handle image load error
-  const handleImageError = (filePath: string) => {
-    console.log('Image load error for path:', filePath);
-    setImageErrors(prev => new Set(prev).add(filePath));
+  const handleImageError = (anomalyUuid: string) => {
+    console.log('Image load error for anomaly UUID:', anomalyUuid);
+    setImageErrors(prev => new Set(prev).add(anomalyUuid));
   };
 
   // Fetch anomaly logs metadata
@@ -85,11 +88,11 @@ export const LogsPage: React.FC = () => {
       // Filter logs for this specific streamer
       const streamerLogs = data.anomaly_logs_metadata.filter(log => log.streamer_uuid === streamerUuid);
       
-      // Debug: Log the file paths to see what we're getting
+      // Debug: Log the anomaly logs data
       console.log('Anomaly logs data:', data);
       console.log('Streamer logs:', streamerLogs);
       streamerLogs.forEach((log, index) => {
-        console.log(`Log ${index} file_path:`, log.file_path);
+        console.log(`Log ${index} anomaly_uuid:`, log.anomaly_uuid);
       });
       
       setLogs(streamerLogs);
@@ -304,17 +307,17 @@ export const LogsPage: React.FC = () => {
               <div className={`aspect-square flex items-center justify-center relative overflow-hidden ${
                 theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
               }`}>
-                {imageErrors.has(log.file_path) ? (
+                {imageErrors.has(log.anomaly_uuid) ? (
                   <div className="flex flex-col items-center justify-center text-center p-4">
                     <AlertTriangle className="w-8 h-8 text-red-500 mb-2" />
                     <p className="text-xs text-muted-foreground">Image not available</p>
                   </div>
                 ) : (
                   <img
-                    src={getImageUrl(log.file_path)}
+                    src={getImageUrl(log.anomaly_uuid)}
                     alt={`Anomaly ${log.anomaly_uuid}`}
                     className="w-full h-full object-cover"
-                    onError={() => handleImageError(log.file_path)}
+                    onError={() => handleImageError(log.anomaly_uuid)}
                     loading="lazy"
                   />
                 )}
@@ -365,7 +368,7 @@ export const LogsPage: React.FC = () => {
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
                   <button
-                    onClick={() => setSelectedImage(log.file_path)}
+                    onClick={() => setSelectedImage(log.anomaly_uuid)}
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
                   >
                     <Eye size={14} />
@@ -403,7 +406,7 @@ export const LogsPage: React.FC = () => {
                   <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
                   <p className="text-muted-foreground">Image not available</p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Anomaly ID: {selectedImage}
+                    Anomaly UUID: {selectedImage}
                   </p>
                 </div>
               ) : (

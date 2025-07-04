@@ -49,81 +49,68 @@ class AnomalyLogsMetadataResource(Resource):
 
 class AnomalyLogImageResource(Resource):
     def get(self):
-        """Serve anomaly log image by reading from compute unit's file system via HTTP request"""
+        """Serve anomaly log image by fetching base64 image from compute unit using anomaly_uuid"""
         try:
             compute_unit_ip = request.args.get('compute_unit_ip')
-            file_path = request.args.get('file_path')
+            anomaly_uuid = request.args.get('anomaly_uuid')
             
             if not compute_unit_ip:
                 return {'message': 'compute_unit_ip parameter is required'}, 400
-            if not file_path:
-                return {'message': 'file_path parameter is required'}, 400
+            if not anomaly_uuid:
+                return {'message': 'anomaly_uuid parameter is required'}, 400
             
-            logger.info(f"Serving image from compute unit {compute_unit_ip}, file: {file_path}")
+            logger.info(f"Fetching anomaly image from compute unit {compute_unit_ip}, anomaly_uuid: {anomaly_uuid}")
             
             # Handle compute unit IP - remove port if it exists, then add :8000
             base_ip = compute_unit_ip.split(':')[0] if ':' in compute_unit_ip else compute_unit_ip
+            ai_service_url = f"http://{base_ip}:8000/anomaly_app_v1/public/get_anomaly_logs_by_uuid"
             
-            # Try different possible methods to get the image from compute unit
-            image_urls_to_try = [
-                # Method 1: Try a direct file serve endpoint (if exists)
-                f"http://{base_ip}:8000/files{file_path}",
-                f"http://{base_ip}:8000/static{file_path}",
-                f"http://{base_ip}:8000/images{file_path}",
-                # Method 2: Try anomaly app specific endpoints
-                f"http://{base_ip}:8000/anomaly_app_v1/public/image{file_path}",
-                f"http://{base_ip}:8000/anomaly_app_v1/files{file_path}",
-            ]
+            # Prepare data for AI service - POST request with anomaly_uuids list
+            ai_service_data = {
+                "anomaly_uuids": [anomaly_uuid]
+            }
             
-            last_error = None
+            logger.info(f"POSTing to compute unit for anomaly image: {ai_service_url}")
+            response = requests.post(ai_service_url, json=ai_service_data, timeout=10)
+            response.raise_for_status()
             
-            for image_url in image_urls_to_try:
-                try:
-                    logger.info(f"Trying to fetch image from: {image_url}")
-                    response = requests.get(image_url, timeout=10, stream=True)
-                    
-                    if response.status_code == 200:
-                        logger.info(f"Successfully found image at: {image_url}")
-                        
-                        # Determine content type
-                        content_type = response.headers.get('content-type')
-                        if not content_type:
-                            # Guess content type from file extension
-                            import mimetypes
-                            content_type, _ = mimetypes.guess_type(file_path)
-                            if not content_type:
-                                content_type = 'image/jpeg'
-                        
-                        # Extract filename from file_path
-                        import os
-                        filename = os.path.basename(file_path) if file_path else 'anomaly_image.jpg'
-                        
-                        # Create Flask response with the image data
-                        def generate():
-                            for chunk in response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    yield chunk
-                        
-                        return Response(
-                            generate(),
-                            mimetype=content_type,
-                            headers={
-                                'Content-Disposition': f'inline; filename="{filename}"',
-                                'Cache-Control': 'public, max-age=3600'  # Cache for 1 hour
-                            }
-                        )
-                    
-                except requests.exceptions.RequestException as e:
-                    last_error = e
-                    logger.debug(f"Failed to fetch from {image_url}: {e}")
-                    continue
+            response_data = response.json()
             
-            # If all methods failed, return a 404 error
-            logger.error(f"Could not find image at any URL for file: {file_path}")
-            logger.error(f"Last error: {last_error}")
+            # Check if we got a valid response with anomaly logs
+            if not response_data.get('anomaly_logs') or len(response_data['anomaly_logs']) == 0:
+                logger.error(f"No anomaly log found for UUID: {anomaly_uuid}")
+                return {'message': f'Anomaly log not found: {anomaly_uuid}'}, 404
             
-            return {'message': f'Image not found: {file_path}'}, 404
+            anomaly_log = response_data['anomaly_logs'][0]
             
+            # Check if frame_base64_jpeg exists
+            if not anomaly_log.get('frame_base64_jpeg'):
+                logger.error(f"No frame_base64_jpeg found for anomaly UUID: {anomaly_uuid}")
+                return {'message': f'Image data not found for anomaly: {anomaly_uuid}'}, 404
+            
+            # Decode base64 image
+            import base64
+            try:
+                image_data = base64.b64decode(anomaly_log['frame_base64_jpeg'])
+                logger.info(f"Successfully decoded base64 image for anomaly UUID: {anomaly_uuid}")
+                
+                # Create Flask response with the image data
+                return Response(
+                    image_data,
+                    mimetype='image/jpeg',
+                    headers={
+                        'Content-Disposition': f'inline; filename="anomaly_{anomaly_uuid[:8]}.jpg"',
+                        'Cache-Control': 'public, max-age=3600'  # Cache for 1 hour
+                    }
+                )
+                
+            except Exception as decode_error:
+                logger.error(f"Failed to decode base64 image for anomaly UUID {anomaly_uuid}: {decode_error}")
+                return {'message': f'Failed to decode image data for anomaly: {anomaly_uuid}'}, 500
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching anomaly image from AI service {compute_unit_ip}: {e}")
+            return {'message': f'Failed to connect to AI service at {compute_unit_ip}'}, 500
         except Exception as e:
             logger.error(f"Unexpected error in anomaly log image request: {e}")
             return {'message': 'Internal server error'}, 500
