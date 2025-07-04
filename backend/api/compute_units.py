@@ -6,8 +6,10 @@ from flask import Blueprint, request, jsonify
 from flask_restful import Api, Resource
 import datetime
 import logging
+import requests
+import json
 
-from models import db, ComputeUnit
+from models import db, ComputeUnit, Streamer
 from utils.ping import ping_device_detailed
 
 # Configure logging
@@ -20,15 +22,100 @@ compute_units_api = Api(compute_units_bp)
 
 class ComputeUnitsResource(Resource):
     def get(self):
-        """Get all compute units"""
+        """Get all compute units with their cameras"""
         try:
             compute_units = ComputeUnit.query.all()
-            result = [unit.to_dict() for unit in compute_units]
+            result = []
+            
+            for unit in compute_units:
+                unit_dict = unit.to_dict(include_cameras=True)
+                
+                # If unit is online, try to sync cameras from live data
+                if unit.status == 'online':
+                    try:
+                        self._sync_cameras_from_unit(unit)
+                    except Exception as sync_error:
+                        logger.warning(f"Failed to sync cameras for unit {unit.ip_address}: {sync_error}")
+                        # Mark unit as offline if sync fails
+                        unit.status = 'offline'
+                        db.session.commit()
+                        unit_dict['status'] = 'offline'
+                
+                # Get updated camera data from database after sync
+                cameras = []
+                streamers = Streamer.query.filter_by(compute_unit_id=unit.id, streamer_type='camera').all()
+                for streamer in streamers:
+                    camera_dict = streamer.to_dict()
+                    # If compute unit is offline, mark all cameras as inactive
+                    if unit.status == 'offline':
+                        camera_dict['status'] = 'inactive'
+                        camera_dict['is_alive'] = '0'
+                    cameras.append(camera_dict)
+                unit_dict['cameras'] = cameras
+                
+                result.append(unit_dict)
+            
             logger.info(f"Retrieved {len(result)} compute units")
             return {'compute_units': result}, 200
         except Exception as e:
             logger.error(f"Error retrieving compute units: {e}")
             return {'message': 'Failed to retrieve compute units'}, 500
+    
+    def _sync_cameras_from_unit(self, unit):
+        """Sync camera data from compute unit and store in database"""
+        try:
+            # Use the Flask proxy endpoint to get cameras
+            proxy_url = f"http://localhost:8001/get_cameras?compute_unit_ip={unit.ip_address}"
+            response = requests.get(proxy_url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                cameras = data.get('payload', [])
+                
+                logger.info(f"Found {len(cameras)} cameras for unit {unit.ip_address}")
+                
+                # Update/create streamers in database
+                for camera_data in cameras:
+                    streamer_uuid = camera_data.get('streamer_uuid')
+                    if not streamer_uuid:
+                        continue
+                    
+                    # Find or create streamer
+                    streamer = Streamer.query.filter_by(streamer_uuid=streamer_uuid).first()
+                    if not streamer:
+                        streamer = Streamer(
+                            streamer_uuid=streamer_uuid,
+                            streamer_type='camera',
+                            streamer_hr_name=camera_data.get('streamer_hr_name', f'Camera {streamer_uuid}'),
+                            config_template_name='default',
+                            compute_unit_id=unit.id,
+                            ip_address=unit.ip_address
+                        )
+                        db.session.add(streamer)
+                        logger.info(f"Created new streamer: {streamer.streamer_hr_name}")
+                    
+                    # Update streamer info
+                    streamer.streamer_hr_name = camera_data.get('streamer_hr_name', streamer.streamer_hr_name)
+                    streamer.status = 'active' if camera_data.get('is_alive') == '1' else 'inactive'
+                    streamer.is_alive = camera_data.get('is_alive', '0')
+                    streamer.ip_address = unit.ip_address
+                    streamer.compute_unit_id = unit.id
+                    streamer.last_seen = datetime.datetime.utcnow()
+                    
+                    # Store features as JSON string
+                    features = camera_data.get('features', [])
+                    streamer.features = json.dumps(features) if features else None
+                
+                # Mark unit as online
+                unit.status = 'online'
+                unit.last_seen = datetime.datetime.utcnow()
+                
+                db.session.commit()
+                logger.info(f"Synced {len(cameras)} cameras for unit {unit.ip_address}")
+                
+        except Exception as e:
+            logger.error(f"Error syncing cameras for unit {unit.ip_address}: {e}")
+            raise
     
     def post(self):
         """Add a new compute unit"""
@@ -65,8 +152,15 @@ class ComputeUnitsResource(Resource):
             db.session.add(new_unit)
             db.session.commit()
             
+            # Try to sync cameras immediately after adding the unit
+            try:
+                self._sync_cameras_from_unit(new_unit)
+                logger.info(f"Synced cameras for new unit: {name} ({ip_address})")
+            except Exception as sync_error:
+                logger.warning(f"Failed to sync cameras for new unit {ip_address}: {sync_error}")
+            
             logger.info(f"Added new compute unit: {name} ({ip_address})")
-            return {'compute_unit': new_unit.to_dict()}, 201
+            return {'compute_unit': new_unit.to_dict(include_cameras=True)}, 201
             
         except Exception as e:
             logger.error(f"Error adding compute unit: {e}")
@@ -78,20 +172,69 @@ class ComputeUnitsResource(Resource):
         return {}, 200
 
 
+class ComputeUnitStatusResource(Resource):
+    def put(self, unit_id):
+        """Update compute unit status only"""
+        try:
+            compute_unit = ComputeUnit.query.get(unit_id)
+            if not compute_unit:
+                return {'message': 'Compute unit not found'}, 404
+            
+            data = request.get_json()
+            if not data or 'status' not in data:
+                return {'message': 'Status is required'}, 400
+            
+            old_status = compute_unit.status
+            new_status = data['status']
+            
+            compute_unit.status = new_status
+            compute_unit.updated_at = datetime.datetime.utcnow()
+            
+            if new_status == 'online':
+                compute_unit.last_seen = datetime.datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"Updated compute unit {compute_unit.name} status: {old_status} -> {new_status}")
+            return {'compute_unit': compute_unit.to_dict()}, 200
+            
+        except Exception as e:
+            logger.error(f"Error updating compute unit status: {e}")
+            db.session.rollback()
+            return {'message': 'Failed to update compute unit status'}, 500
+    
+    def options(self, unit_id):
+        """Handle CORS preflight for compute unit status endpoint"""
+        return {}, 200
+
+
 class ComputeUnitResource(Resource):
     def delete(self, unit_id):
-        """Delete a compute unit"""
+        """Delete a compute unit and all associated streamers"""
         try:
             compute_unit = ComputeUnit.query.get(unit_id)
             if not compute_unit:
                 return {'message': 'Compute unit not found'}, 404
             
             ip_address = compute_unit.ip_address
+            unit_name = compute_unit.name
+            
+            # First delete all associated streamers
+            streamers = Streamer.query.filter_by(compute_unit_id=unit_id).all()
+            streamer_count = len(streamers)
+            
+            for streamer in streamers:
+                db.session.delete(streamer)
+            
+            # Then delete the compute unit
             db.session.delete(compute_unit)
             db.session.commit()
             
-            logger.info(f"Deleted compute unit: {ip_address}")
-            return {'message': 'Compute unit deleted successfully'}, 200
+            logger.info(f"Deleted compute unit: {unit_name} ({ip_address}) and {streamer_count} associated streamers")
+            return {
+                'message': 'Compute unit deleted successfully',
+                'deleted_streamers_count': streamer_count
+            }, 200
             
         except Exception as e:
             logger.error(f"Error deleting compute unit: {e}")
@@ -133,3 +276,48 @@ class ComputeUnitResource(Resource):
 # Register resources with the API
 compute_units_api.add_resource(ComputeUnitsResource, '/api/compute_units')
 compute_units_api.add_resource(ComputeUnitResource, '/api/compute_units/<int:unit_id>')
+compute_units_api.add_resource(ComputeUnitStatusResource, '/api/compute_units/<int:unit_id>/status')
+
+
+class ComputeUnitCamerasResource(Resource):
+    def get(self, unit_id):
+        """Get all cameras for a specific compute unit"""
+        try:
+            compute_unit = ComputeUnit.query.get(unit_id)
+            if not compute_unit:
+                return {'message': 'Compute unit not found'}, 404
+            
+            cameras = []
+            streamers = Streamer.query.filter_by(compute_unit_id=unit_id, streamer_type='camera').all()
+            for streamer in streamers:
+                cameras.append(streamer.to_dict())
+            
+            return {'cameras': cameras}, 200
+        except Exception as e:
+            logger.error(f"Error retrieving cameras for unit {unit_id}: {e}")
+            return {'message': 'Failed to retrieve cameras'}, 500
+    
+    def post(self, unit_id):
+        """Sync cameras for a specific compute unit"""
+        try:
+            compute_unit = ComputeUnit.query.get(unit_id)
+            if not compute_unit:
+                return {'message': 'Compute unit not found'}, 404
+            
+            resource = ComputeUnitsResource()
+            resource._sync_cameras_from_unit(compute_unit)
+            
+            # Return updated cameras
+            cameras = []
+            streamers = Streamer.query.filter_by(compute_unit_id=unit_id, streamer_type='camera').all()
+            for streamer in streamers:
+                cameras.append(streamer.to_dict())
+            
+            return {'cameras': cameras, 'message': 'Cameras synced successfully'}, 200
+        except Exception as e:
+            logger.error(f"Error syncing cameras for unit {unit_id}: {e}")
+            return {'message': 'Failed to sync cameras'}, 500
+
+
+# Register the new cameras endpoint
+compute_units_api.add_resource(ComputeUnitCamerasResource, '/api/compute_units/<int:unit_id>/cameras')

@@ -40,6 +40,7 @@ interface FavoritesContextType {
   isFavorite: (streamerUuid: string) => boolean;
   clearFavorites: () => void;
   refreshFavorites: () => Promise<void>;
+  removeFavoritesByComputeUnitIP: (computeUnitIP: string) => Promise<void>;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
@@ -150,6 +151,25 @@ export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children 
     setFavoriteStreamers(backendFavorites);
   }, []);
 
+  const removeFavoritesByComputeUnitIP = useCallback(async (computeUnitIP: string) => {
+    // Find all favorites from this compute unit
+    const favoritesToRemove = favoriteStreamers.filter(
+      fav => fav.computeUnitIP === computeUnitIP
+    );
+
+    // Remove each favorite from backend
+    for (const favorite of favoritesToRemove) {
+      await removeFavoriteFromBackend(favorite.streamerUuid);
+    }
+
+    // Update local state
+    setFavoriteStreamers(prev => 
+      prev.filter(fav => fav.computeUnitIP !== computeUnitIP)
+    );
+
+    console.log(`Removed ${favoritesToRemove.length} favorites from compute unit ${computeUnitIP}`);
+  }, [favoriteStreamers]);
+
   return (
     <FavoritesContext.Provider
       value={{
@@ -160,6 +180,7 @@ export const FavoritesProvider: React.FC<{ children: ReactNode }> = ({ children 
         isFavorite,
         clearFavorites,
         refreshFavorites, // Expose refresh function
+        removeFavoritesByComputeUnitIP, // Expose compute unit removal function
       }}
     >
       {children}

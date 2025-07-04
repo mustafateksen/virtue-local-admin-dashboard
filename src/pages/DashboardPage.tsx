@@ -1,194 +1,121 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package } from 'lucide-react';
+import { Monitor, HardDrive, Cpu, Activity, Server, FileWarning, ArrowRight, Package, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-
-// Interface for I/O Units (matching DevicesPage)
-interface IOUnit {
-  id: string;
-  name: string;
-  ipAddress: string;
-  status: 'online' | 'offline';
-  inputs: number;
-  outputs: number;
-  lastActivity: string;
-}
-
-// Get dynamic API base URL based on current window location
-function getAPIBaseURL(): string {
-  // If we have an environment variable, use it
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
-  }
-  
-  // Check if we're running in production (Docker) - use relative URLs
-  if (import.meta.env.PROD) {
-    return ''; // Use relative URLs in production (Nginx will proxy)
-  }
-  
-  // Otherwise, construct URL based on current host (development)
-  const protocol = window.location.protocol; // http: or https:
-  const hostname = window.location.hostname; // Current IP or hostname
-  const port = '8001'; // Backend port
-  
-  return `${protocol}//${hostname}:${port}`;
-}
-
-// API Base URL - Flask backend (configurable and dynamic)
-const API_BASE_URL = getAPIBaseURL();
-
-// Backend API functions for Compute Units
-const loadIOUnitsFromBackend = async (): Promise<IOUnit[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/compute_units`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      // Convert backend format to frontend IOUnit format
-      return data.compute_units.map((unit: any) => ({
-        id: unit.id,
-        name: unit.name,
-        ipAddress: unit.ipAddress,
-        status: unit.status,
-        inputs: 4, // Default values
-        outputs: 4,
-        lastActivity: unit.lastSeen || 'Never'
-      }));
-    }
-    console.error('Failed to load compute units from backend');
-    return [];
-  } catch (error) {
-    console.error('Failed to load Compute Units from backend:', error);
-    return [];
-  }
-};
+import { useComputeUnitStatus } from '../hooks/useComputeUnitStatus';
 
 export const DashboardPage: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
-  const [ioUnits, setIOUnits] = useState<IOUnit[]>([]);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Use the centralized hook for consistent data across all pages
+  const { computeUnits, loading, lastSyncTime, error, refresh } = useComputeUnitStatus({
+    componentName: 'Dashboard',
+    pollingInterval: 6000,    // Check every 6 seconds
+    autoCheckInterval: 8000,  // Ping every 8 seconds
+    enableAutoCheck: true,
+    enablePolling: true,
+    enableVisibilityRefresh: true,
+  });
 
-  // Polling interval for real-time sync (check every 10 seconds)
-  useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      try {
-        // Only poll if we're not currently doing other operations
-        if (!isRefreshing) {
-          console.log('🔄 [Dashboard] Polling for updates...');
-          
-          // Load latest compute units from backend
-          const latestIOUnits = await loadIOUnitsFromBackend();
-          
-          // Check if there are any changes
-          const hasChanges = 
-            latestIOUnits.length !== ioUnits.length ||
-            latestIOUnits.some(unit => {
-              const existing = ioUnits.find(u => u.id === unit.id);
-              return !existing || 
-                     existing.status !== unit.status || 
-                     existing.name !== unit.name ||
-                     existing.ipAddress !== unit.ipAddress;
-            });
-          
-          if (hasChanges) {
-            console.log('📱 [Dashboard] Changes detected, updating state...');
-            setIOUnits(latestIOUnits);
-            
-            // Update last sync time
-            setLastSyncTime(new Date());
-          }
-        }
-      } catch (error) {
-        console.error('[Dashboard] Polling error:', error);
-      }
-    }, 10000); // Poll every 10 seconds
+  // Calculate stats from the unified data
+  const totalCameras = computeUnits.reduce((sum, unit) => sum + (unit.cameras?.length || 0), 0);
+  const activeCameras = computeUnits.reduce((sum, unit) =>
+    sum + (unit.cameras?.filter(c => c.status === 'active').length || 0), 0);
+  const onlineUnits = computeUnits.filter(unit => unit.status === 'online').length;
 
-    return () => clearInterval(pollInterval);
-  }, [ioUnits, isRefreshing]);
-
-  // Handle page visibility changes - refresh when user comes back to the page
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        console.log('👀 [Dashboard] Page became visible, refreshing data...');
-        try {
-          setIsRefreshing(true);
-          const latestIOUnits = await loadIOUnitsFromBackend();
-          setIOUnits(latestIOUnits);
-          setLastSyncTime(new Date());
-        } catch (error) {
-          console.error('[Dashboard] Visibility refresh error:', error);
-        } finally {
-          setIsRefreshing(false);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  // Load compute units from backend on component mount
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        setIsRefreshing(true);
-        console.log('🚀 [Dashboard] Loading initial data...');
-        
-        // Load compute units from backend
-        const backendIOUnits = await loadIOUnitsFromBackend();
-        setIOUnits(backendIOUnits);
-        setLastSyncTime(new Date());
-        
-        console.log(`✅ [Dashboard] Loaded ${backendIOUnits.length} compute units`);
-      } catch (error) {
-        console.error('[Dashboard] Failed to load initial data:', error);
-      } finally {
-        setIsRefreshing(false);
-      }
-    };
-
-    loadInitialData();
-  }, []); // Empty dependency array - only run on mount
-
-  // Calculate uptime display
-  const getUptimeDisplay = (lastActivity: string, status: string) => {
-    if (status === 'offline') return '-';
-    
-    try {
-      const lastTime = new Date(lastActivity);
-      const now = new Date();
-      const diffMs = now.getTime() - lastTime.getTime();
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffDays = Math.floor(diffHours / 24);
-      
-      if (diffDays > 0) {
-        return `${diffDays}d ${diffHours % 24}h`;
-      } else {
-        return `${diffHours}h`;
-      }
-    } catch {
-      return 'Unknown';
-    }
+  // Format last sync time
+  const formatLastSync = (date: Date | null) => {
+    if (!date) return 'Never';
+    return date.toLocaleTimeString();
   };
+
+  // Loading state
+  if (loading && computeUnits.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <RefreshCw className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-4" />
+          <p className="text-foreground">Loading system status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 mx-auto text-red-500 mb-4" />
+          <h2 className="text-xl font-semibold text-foreground">Failed to load dashboard</h2>
+          <p className="text-muted-foreground mt-2">{error}</p>
+          <button
+            onClick={() => refresh()}
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 lg:space-y-10">
-      <div>
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Dashboard</h1>
-        <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
-          Overview of your Main Terminal Cluster and System status
-        </p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Dashboard</h1>
+          <p className="mt-2 lg:mt-3 text-sm sm:text-base lg:text-lg text-muted-foreground">
+            Overview of your Main Terminal Cluster and System status
+          </p>
+        </div>
+        <div className="flex items-center gap-4 mt-4 sm:mt-0">
+          <span className="text-sm text-muted-foreground">
+            {loading && <RefreshCw className="h-4 w-4 animate-spin mr-2 inline" />}
+            Last updated: {formatLastSync(lastSyncTime)}
+          </span>
+          <button
+            onClick={() => refresh()}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* System Information */}
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-card shadow rounded-lg border border-border p-4 sm:p-6">
+          <h3 className="text-sm font-medium text-muted-foreground">Total Compute Units</h3>
+          <p className="text-3xl font-bold text-foreground">{computeUnits.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">{onlineUnits} online</p>
+        </div>
+        <div className="bg-card shadow rounded-lg border border-border p-4 sm:p-6">
+          <h3 className="text-sm font-medium text-muted-foreground">Online Units</h3>
+          <p className="text-3xl font-bold text-foreground">{onlineUnits}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {((onlineUnits / Math.max(computeUnits.length, 1)) * 100).toFixed(0)}% uptime
+          </p>
+        </div>
+        <div className="bg-card shadow rounded-lg border border-border p-4 sm:p-6">
+          <h3 className="text-sm font-medium text-muted-foreground">Total Cameras</h3>
+          <p className="text-3xl font-bold text-foreground">{totalCameras}</p>
+          <p className="text-xs text-muted-foreground mt-1">{activeCameras} active</p>
+        </div>
+        <div className="bg-card shadow rounded-lg border border-border p-4 sm:p-6">
+          <h3 className="text-sm font-medium text-muted-foreground">Active Cameras</h3>
+          <p className="text-3xl font-bold text-foreground">{activeCameras}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {((activeCameras / Math.max(totalCameras, 1)) * 100).toFixed(0)}% active
+          </p>
+        </div>
+      </div>
+
+      {/* System Information Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
         {/* System Status */}
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
@@ -259,21 +186,15 @@ export const DashboardPage: React.FC = () => {
         <div className="bg-card shadow rounded-lg border border-border hover:shadow-lg transition-shadow">
           <div className="px-6 py-6 sm:p-8 h-full flex flex-col">
             <h3 className="text-xl lg:text-2xl xl:text-3xl leading-6 font-bold text-foreground mb-6">
-              Connected I/O Units
-              {/* Debug: Show last sync time */}
-              {lastSyncTime && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  (synced {lastSyncTime.toLocaleTimeString()})
-                </span>
-              )}
+              Compute Units
             </h3>
             <div className="space-y-4 flex-1">
-              {ioUnits.length === 0 ? (
+              {computeUnits.length === 0 ? (
                 <div className="flex items-center justify-center p-6 text-center h-full min-h-[200px]">
                   <div>
                     <Cpu className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
                     <p className="text-sm lg:text-base text-muted-foreground">
-                      No I/O Units connected
+                      No Compute Units found
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Add devices in the Devices page to see them here
@@ -281,11 +202,15 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                ioUnits.map((unit, index) => (
-                  <div key={unit.id || index} className="flex items-center justify-between p-4 lg:p-5 bg-secondary/50 rounded-lg hover:bg-secondary/70 transition-colors">
+                computeUnits.map((unit) => (
+                  <div key={unit.id} className="flex items-center justify-between p-4 lg:p-5 bg-secondary/50 rounded-lg hover:bg-secondary/70 transition-colors">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm lg:text-base font-medium text-foreground truncate">{unit.name}</p>
-                      <p className="text-sm lg:text-base text-muted-foreground">{unit.ipAddress}</p>
+                      <p className="text-sm text-muted-foreground">{unit.ipAddress}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {unit.cameras.length} camera{unit.cameras.length !== 1 ? 's' : ''} 
+                        {unit.cameras.length > 0 && ` (${unit.cameras.filter(c => c.status === 'active').length} active)`}
+                      </p>
                     </div>
                     <div className="text-right ml-4">
                       <span className={`inline-flex px-3 py-1 lg:px-4 lg:py-2 text-sm lg:text-base font-semibold rounded-full ${
@@ -295,8 +220,8 @@ export const DashboardPage: React.FC = () => {
                       }`}>
                         {unit.status === 'online' ? 'Online' : 'Offline'}
                       </span>
-                      <p className="text-sm lg:text-base text-muted-foreground mt-1">
-                        {getUptimeDisplay(unit.lastActivity, unit.status)}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {unit.lastSeen ? new Date(unit.lastSeen).toLocaleTimeString() : 'Unknown'}
                       </p>
                     </div>
                   </div>

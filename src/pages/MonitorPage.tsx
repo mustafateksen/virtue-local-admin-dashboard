@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Cctv, X, Play, Square, Settings, Star, FileText, Brain, ScanLine, BarChart3 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useComputeUnitStatus } from '../hooks/useComputeUnitStatus';
 import { ManageFavoritesModal } from '../components/ManageFavoritesModal';
 import { useNavigate } from 'react-router-dom';
 import cam1image from '../assets/cam1.png';
@@ -103,8 +104,19 @@ const fetchLastFrame = async (computeUnitIP: string, streamerUuid: string): Prom
 
 export const MonitorPage: React.FC = () => {
   const { theme } = useTheme();
-  const { favoriteStreamers, refreshFavorites } = useFavorites(); // Add refreshFavorites
+  const { favoriteStreamers, refreshFavorites } = useFavorites();
   const navigate = useNavigate();
+  
+  // Use centralized hook for compute unit and camera data
+  const { computeUnits } = useComputeUnitStatus({
+    componentName: 'MonitorPage',
+    pollingInterval: 5000,
+    autoCheckInterval: 8000,
+    enableAutoCheck: true,
+    enablePolling: true,
+    enableVisibilityRefresh: true,
+  });
+  
   const [learning, setLearning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -113,7 +125,46 @@ export const MonitorPage: React.FC = () => {
   const [streamerStatuses, setStreamerStatuses] = useState<Record<string, any>>({});
   const [streamerAssignments, setStreamerAssignments] = useState<Record<string, AppAssignment[]>>({});
   const [streamerFrames, setStreamerFrames] = useState<Record<string, string>>({});
-  const [liveStreamers, setLiveStreamers] = useState<any[]>([]); // Fresh data directly from AI services
+
+  // Get favorited cameras from compute units - this is our single source of truth
+  // Memoize to prevent infinite re-renders
+  const favoritedCameras = useMemo(() => {
+    console.log(`🔍 [MonitorPage] Computing favorited cameras...`);
+    console.log(`📊 [MonitorPage] Available compute units: ${computeUnits.length}`);
+    console.log(`⭐ [MonitorPage] Favorite streamers: ${favoriteStreamers.length}`);
+    
+    const allCameras = computeUnits.flatMap(unit => {
+      console.log(`🏢 [MonitorPage] Unit ${unit.name} (${unit.status}): ${unit.cameras.length} cameras`);
+      
+      // CRITICAL: Include ALL cameras that are marked as favorites, regardless of unit status
+      const unitFavoriteCameras = unit.cameras.filter(camera => {
+        const isFavorite = favoriteStreamers.some(fav => fav.streamerUuid === camera.streamerUuid);
+        if (isFavorite) {
+          console.log(`⭐ [MonitorPage] Found favorite camera: ${camera.name} (${camera.status}) from unit ${unit.name} (${unit.status})`);
+        }
+        return isFavorite;
+      });
+      
+      return unitFavoriteCameras.map(camera => ({
+        ...camera,
+        computeUnitIP: unit.ipAddress,
+        computeUnitName: unit.name,
+        computeUnitStatus: unit.status,
+        // Map to MonitorPage expected format
+        streamerUuid: camera.streamerUuid,
+        streamerHrName: camera.name,
+        // Camera is "alive" only if both camera and unit are active/online
+        isAlive: camera.status === 'active' && unit.status === 'online'
+      }));
+    });
+    
+    console.log(`📷 [MonitorPage] Final favorited cameras count: ${allCameras.length}`);
+    allCameras.forEach(cam => {
+      console.log(`  - ${cam.streamerHrName} (${cam.isAlive ? 'ALIVE' : 'OFFLINE'}) from ${cam.computeUnitName}`);
+    });
+    
+    return allCameras;
+  }, [computeUnits, favoriteStreamers]);
 
   // Mark context as loaded after a short delay to ensure it's properly initialized
   useEffect(() => {
@@ -143,80 +194,17 @@ export const MonitorPage: React.FC = () => {
     setModalImg(null);
   };
 
-  // Fetch all streamers from AI service and merge with favorites
-  const fetchAllStreamersFromAI = async () => {
-    // Debug: Log favorites from context
-    console.log('🎯 Favorites from context:', favoriteStreamers);
-    
-    // Get the list of favorite streamer UUIDs from the context
-    const favoriteUuids = new Set(favoriteStreamers.map((f: any) => f.streamerUuid));
-    console.log('🎯 Favorite UUIDs:', Array.from(favoriteUuids));
-    
-    if (favoriteUuids.size === 0) {
-      console.log('🎯 No favorites found, clearing live streamers');
-      setLiveStreamers([]); // Clear if no favorites
-      return;
-    }
-
-    const allLiveStreamers: any[] = [];
-    
-    // Get unique compute units from favorites to query them
-    const computeUnits = Array.from(new Set(favoriteStreamers.map((f: any) => f.computeUnitIP)));
-    
-    console.log('🔍 Fetching live data for favorites from compute units:', computeUnits);
-    
-    for (const computeUnitIP of computeUnits) {
-      try {
-        // Use backend proxy to avoid CORS issues
-        const response = await fetch(`${API_BASE_URL}/api/streamers/proxy?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`);
-        if (response.ok) {
-          const responseData = await response.json();
-          console.log(`🔍 Raw response from ${computeUnitIP}:`, responseData);
-          
-          // Extract the payload array from the response
-          const streamersFromAI = responseData.payload || responseData;
-          
-          // Ensure it's an array before filtering
-          if (!Array.isArray(streamersFromAI)) {
-            console.error(`❌ Expected array but got:`, typeof streamersFromAI, streamersFromAI);
-            continue;
-          }
-          
-          // Filter to only include streamers that are in our favorites list
-          const favoriteStreamersFromAI = streamersFromAI.filter((s: any) => favoriteUuids.has(s.streamer_uuid));
-          
-          console.log(`✅ Got ${favoriteStreamersFromAI.length} favorite streamers from ${computeUnitIP}`);
-
-          allLiveStreamers.push(...favoriteStreamersFromAI.map((s: any) => ({
-            ...s,
-            computeUnitIP, // Add computeUnitIP for later use
-            streamerUuid: s.streamer_uuid,
-            streamerHrName: s.streamer_hr_name, // Direct mapping from AI service
-            isAlive: s.is_alive === 1 || s.is_alive === '1' || s.is_alive === true // Normalize to boolean logic
-          })));
-        } else {
-          console.error(`❌ HTTP Error ${response.status} fetching streamers from ${computeUnitIP}`);
-        }
-      } catch (error) {
-        console.error(`❌ Failed to fetch streamers from ${computeUnitIP}:`, error);
-      }
-    }
-    
-    console.log('📺 Final live streamers set:', allLiveStreamers.map((s: any) => `${s.streamerUuid}: "${s.streamerHrName}"`));
-    setLiveStreamers(allLiveStreamers);
-  };
-
   // Update streamer statuses, assignments and frames periodically
   useEffect(() => {
     const updateStatuses = async () => {
       const statuses: Record<string, any> = {};
       
-      for (const streamer of liveStreamers) {
+      for (const camera of favoritedCameras) {
         // TODO: BURASI API ILE BAĞLANACAK - Gerçek anomali durumu API'den gelecek
-        statuses[streamer.streamerUuid] = {
+        statuses[camera.streamerUuid] = {
           status: 'analyzing', // Default to analyzing, will be replaced with API data
           data: Array.from({ length: 10 }, () => Math.floor(Math.random() * 25) + 1),
-          isAlive: streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1'
+          isAlive: camera.isAlive
         };
       }
       
@@ -226,9 +214,9 @@ export const MonitorPage: React.FC = () => {
     const updateAssignments = async () => {
       const assignments: Record<string, AppAssignment[]> = {};
       
-      for (const streamer of liveStreamers) {
-        const streamerAssignments = await fetchAppAssignments(streamer.computeUnitIP, streamer.streamerUuid);
-        assignments[streamer.streamerUuid] = streamerAssignments;
+      for (const camera of favoritedCameras) {
+        const streamerAssignments = await fetchAppAssignments(camera.computeUnitIP, camera.streamerUuid);
+        assignments[camera.streamerUuid] = streamerAssignments;
       }
       
       setStreamerAssignments(assignments);
@@ -237,21 +225,26 @@ export const MonitorPage: React.FC = () => {
     const updateFrames = async () => {
       const frames: Record<string, string> = {};
       
-      for (const streamer of liveStreamers) {
-        // Only fetch frames for online streamers
-        const isOnline = streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1';
-        if (isOnline) {
-          const frameData = await fetchLastFrame(streamer.computeUnitIP, streamer.streamerUuid);
+      for (const camera of favoritedCameras) {
+        // Try to fetch frames for all cameras, but only for those with online units
+        if (camera.isAlive && camera.computeUnitStatus === 'online') {
+          const frameData = await fetchLastFrame(camera.computeUnitIP, camera.streamerUuid);
           if (frameData) {
-            frames[streamer.streamerUuid] = frameData;
+            frames[camera.streamerUuid] = frameData;
           }
+        } else {
+          // For offline cameras, keep any existing frame or use placeholder
+          console.log(`📷 [MonitorPage] Camera ${camera.streamerHrName} is offline, keeping existing frame or using placeholder`);
         }
       }
       
-      setStreamerFrames(frames);
+      setStreamerFrames(prev => ({
+        ...prev, // Keep existing frames for offline cameras
+        ...frames // Update with new frames for online cameras
+      }));
     };
 
-    if (liveStreamers.length > 0) {
+    if (favoritedCameras.length > 0) {
       // Initial load - run immediately
       updateStatuses();
       updateAssignments();
@@ -267,55 +260,31 @@ export const MonitorPage: React.FC = () => {
         clearInterval(frameInterval);
       };
     }
-  }, [liveStreamers]);
-
-  // Initial load and periodic refresh of streamer data
-  useEffect(() => {
-    console.log('🔄 useEffect triggered for favoriteStreamers:', favoriteStreamers.length);
-    
-    if (favoriteStreamers.length > 0) {
-      // Load immediately
-      fetchAllStreamersFromAI();
-      
-      // Refresh every 3 seconds for real-time updates
-      const refreshInterval = setInterval(fetchAllStreamersFromAI, 3000);
-      
-      return () => clearInterval(refreshInterval);
-    } else {
-      setLiveStreamers([]); // Clear live streamers if there are no favorites
-    }
-  }, [favoriteStreamers]); // Depend on the entire array, React will do shallow comparison
-
-  // Refresh when window gets focus
-  useEffect(() => {
-    const handleFocus = () => {
-      if (favoriteStreamers.length > 0) {
-        fetchAllStreamersFromAI();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [favoriteStreamers]);
+  }, [favoritedCameras]);
 
   const getStreamerDisplayData = (streamer: any) => {
     const status = streamerStatuses[streamer.streamerUuid];
     const isAnomaly = status?.status === 'anomaly';
+    const isOffline = !streamer.isAlive; // Camera or unit is offline
     
     // Debug: Log final display name - SHOULD SHOW UPDATED NAME
-    console.log(`📺 FINAL DISPLAY: ${streamer.streamerUuid} = "${streamer.streamerHrName}"`);
+    console.log(`📺 FINAL DISPLAY: ${streamer.streamerUuid} = "${streamer.streamerHrName}" (isAlive: ${streamer.isAlive}, computeUnitStatus: ${streamer.computeUnitStatus})`);
     
     return {
       ...streamer,
-      status: status?.status || 'analyzing',
+      status: isOffline ? 'offline' : (status?.status || 'analyzing'),
       data: status?.data || [5, 10, 8, 15, 12, 18, 14, 20, 16, 22],
-      overlayColor: isAnomaly ? 'bg-red-600' : 'bg-green-600',
-      statusBg: isAnomaly 
-        ? (theme === 'dark' ? 'bg-red-950' : 'bg-red-100')
-        : (theme === 'dark' ? 'bg-green-950' : 'bg-green-100'),
-      statusText: isAnomaly 
-        ? (theme === 'dark' ? 'text-red-400' : 'text-red-600')
-        : (theme === 'dark' ? 'text-green-400' : 'text-green-600'),
+      overlayColor: isOffline ? 'bg-gray-600' : (isAnomaly ? 'bg-red-600' : 'bg-green-600'),
+      statusBg: isOffline 
+        ? (theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100')
+        : (isAnomaly 
+          ? (theme === 'dark' ? 'bg-red-950' : 'bg-red-100')
+          : (theme === 'dark' ? 'bg-green-950' : 'bg-green-100')),
+      statusText: isOffline
+        ? (theme === 'dark' ? 'text-gray-400' : 'text-gray-600')
+        : (isAnomaly 
+          ? (theme === 'dark' ? 'text-red-400' : 'text-red-600')
+          : (theme === 'dark' ? 'text-green-400' : 'text-green-600')),
     };
   };
 
@@ -408,7 +377,7 @@ export const MonitorPage: React.FC = () => {
       </div>
 
       {/* Camera Grid */}
-      {liveStreamers.length === 0 ? (
+      {favoritedCameras.length === 0 ? (
         // Empty State - No favorites
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Cctv className="w-16 h-16 text-muted-foreground/50 mb-6" />
@@ -431,9 +400,9 @@ export const MonitorPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">
-              Favorite Streamers ({liveStreamers.length})
+              Favorite Streamers ({favoritedCameras.length})
               <span className="text-sm text-muted-foreground ml-2">
-                ({liveStreamers.filter((s: any) => s.isAlive === true || s.isAlive === 1 || s.isAlive === '1').length} online, {liveStreamers.filter((s: any) => !(s.isAlive === true || s.isAlive === 1 || s.isAlive === '1')).length} offline)
+                ({favoritedCameras.filter(camera => camera.isAlive).length} online, {favoritedCameras.filter(camera => !camera.isAlive).length} offline)
               </span>
             </h2>
             <button
@@ -446,23 +415,23 @@ export const MonitorPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap justify-start gap-6 lg:gap-8">
-            {liveStreamers.map((streamer: any) => {
-              const displayData = getStreamerDisplayData(streamer);
-              const isOnline = streamer.isAlive === true || streamer.isAlive === 1 || streamer.isAlive === '1';
+            {favoritedCameras.map((camera: any) => {
+              const displayData = getStreamerDisplayData(camera);
+              const isOnline = camera.isAlive;
               
               return (
-                <div key={streamer.streamerUuid} className="flex flex-col space-y-4 w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-1rem)] xl:w-[calc(25%-1.5rem)]">
+                <div key={camera.streamerUuid} className="flex flex-col space-y-4 w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-1rem)] xl:w-[calc(25%-1.5rem)]">
                   {/* Camera Feed or Offline State */}
                   <div className="relative">
                     {isOnline ? (
                       // Online: Show camera preview
                       <>
                         <img
-                          src={streamerFrames[streamer.streamerUuid] || cam1image}
+                          src={streamerFrames[camera.streamerUuid] || cam1image}
                           alt={displayData.streamerHrName}
                           className="w-full aspect-square object-cover rounded-xl cursor-pointer shadow-lg"
                           onClick={() => { 
-                            setModalImg(streamerFrames[streamer.streamerUuid] || cam1image); 
+                            setModalImg(streamerFrames[camera.streamerUuid] || cam1image); 
                             setModalOpen(true); 
                           }}
                         />
@@ -483,7 +452,9 @@ export const MonitorPage: React.FC = () => {
                         <Cctv className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" />
                         <div className="text-gray-600 dark:text-gray-400 text-center">
                           <div className="font-medium text-lg mb-1">OFFLINE</div>
-                          <div className="text-sm opacity-75">Camera not available</div>
+                          <div className="text-sm opacity-75">
+                            {camera.computeUnitStatus === 'offline' ? 'Compute Unit Offline' : 'Camera not available'}
+                          </div>
                         </div>
                         
                         {/* Offline indicator */}
@@ -496,7 +467,7 @@ export const MonitorPage: React.FC = () => {
 
                     {/* Compute Unit Badge */}
                     <div className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-xs">
-                      {streamer.computeUnitIP}
+                      {camera.computeUnitIP}
                     </div>
                   </div>
 
@@ -510,10 +481,10 @@ export const MonitorPage: React.FC = () => {
                     </div>
 
                     {/* App Features Section */}
-                    {streamerAssignments[streamer.streamerUuid] && streamerAssignments[streamer.streamerUuid].length > 0 && (
+                    {streamerAssignments[camera.streamerUuid] && streamerAssignments[camera.streamerUuid].length > 0 && (
                       <div className="space-y-3">
                         {(() => {
-                          const activeAssignments = streamerAssignments[streamer.streamerUuid]
+                          const activeAssignments = streamerAssignments[camera.streamerUuid]
                             .filter(assignment => assignment.is_active === 'true' || assignment.is_active === '1');
                           
                           const groupedApps = activeAssignments.reduce((acc, assignment) => {
@@ -558,7 +529,7 @@ export const MonitorPage: React.FC = () => {
                                         }`}
                                         onClick={() => {
                                           console.log(`Opening logs for ${displayData.streamerHrName} - ${appName}`);
-                                          navigate(`/logs?streamerUuid=${streamer.streamerUuid}&computeUnitIP=${streamer.computeUnitIP}&streamerName=${encodeURIComponent(displayData.streamerHrName)}`);
+                                          navigate(`/logs?streamerUuid=${camera.streamerUuid}&computeUnitIP=${camera.computeUnitIP}&streamerName=${encodeURIComponent(displayData.streamerHrName)}`);
                                         }}
                                       >
                                         <BarChart3 className="w-3 h-3" /> Logs

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Cpu, Settings, RefreshCw, Search, Check, X, Plus } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useComputeUnitStatus } from '../hooks/useComputeUnitStatus';
 
 // Get dynamic API base URL based on current window location
 function getAPIBaseURL(): string {
@@ -73,71 +74,8 @@ interface Camera {
   computeUnitIP: string;
 }
 
-interface ComputeUnit {
-  id: string;
-  name: string;
-  ipAddress: string;
-  status: 'online' | 'offline';
-  cameras: Camera[];
-  uptime: string;
-  inputs: number;
-  outputs: number;
-  lastActivity: string;
-}
-
 // Backend API functions for Compute Units
-const loadIOUnitsFromBackend = async (): Promise<ComputeUnit[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/compute_units`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      // Convert backend format to frontend ComputeUnit format
-      return data.compute_units.map((unit: any) => ({
-        id: unit.id,
-        name: unit.name,
-        ipAddress: unit.ipAddress,
-        status: unit.status,
-        inputs: 4, // Default values
-        outputs: 4,
-        lastActivity: unit.lastSeen || 'Never',
-        cameras: [], // Will be loaded separately
-        uptime: calculateUptime(unit.lastSeen)
-      }));
-    }
-    console.error('Failed to load compute units from backend');
-    return [];
-  } catch (error) {
-    console.error('Failed to load Compute Units from backend:', error);
-    return [];
-  }
-};
-
-// Fetch cameras/streamers from a specific Compute Unit via Flask proxy
-const getCamerasFromIOUnit = async (computeUnitIP: string): Promise<any[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/get_cameras?compute_unit_ip=${encodeURIComponent(computeUnitIP)}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.payload || [];
-    }
-    return [];
-  } catch (error) {
-    console.error(`Failed to get cameras from Compute Unit ${computeUnitIP}:`, error);
-    return [];
-  }
-};
+// Remove unused functions that were replaced by the centralized hook
 
 // Fetch supported apps for a specific compute unit
 const fetchSupportedApps = async (computeUnitIP: string): Promise<SupportedApp[]> => {
@@ -159,74 +97,6 @@ const fetchSupportedApps = async (computeUnitIP: string): Promise<SupportedApp[]
   } catch (error) {
     console.error(`Failed to fetch supported apps for ${computeUnitIP}:`, error);
     return [];
-  }
-};
-
-// Convert AI streamer data to our Camera interface for Apps page
-const convertAIStreamerToCameraForApps = async (aiStreamer: any, computeUnitIP: string): Promise<Camera> => {
-  // Load current assignments for this streamer
-  let features: string[] = [];
-  try {
-    console.log(`🔄 [Convert] Loading assignments for streamer: ${aiStreamer.streamer_uuid} (${aiStreamer.streamer_hr_name}) on compute unit: ${computeUnitIP}`);
-    const assignments = await fetchAppAssignments(computeUnitIP, aiStreamer.streamer_uuid);
-    console.log(`📋 [Convert] Found ${assignments.length} assignments for streamer ${aiStreamer.streamer_uuid}:`, assignments.map(a => ({
-      id: a.id,
-      app: a.app_name,
-      result: a.app_config_template_name,
-      active: a.is_active,
-      uuid: a.assignment_uuid,
-      streamer_uuid: a.streamer_uuid // Add this to verify it matches
-    })));
-    
-    // Verify all assignments belong to this streamer
-    const incorrectAssignments = assignments.filter(a => a.streamer_uuid !== aiStreamer.streamer_uuid);
-    if (incorrectAssignments.length > 0) {
-      console.error(`❌ [Convert] CRITICAL: Found ${incorrectAssignments.length} assignments that don't belong to streamer ${aiStreamer.streamer_uuid}:`, incorrectAssignments);
-    }
-    
-    features = assignments
-      .filter(assignment => assignment.is_active === 'true')
-      .map(assignment => `${assignment.app_name}.${assignment.app_config_template_name}`);
-    console.log(`✅ [Convert] Active features for streamer ${aiStreamer.streamer_uuid}:`, features);
-  } catch (error) {
-    console.error(`❌ [Convert] Failed to load assignments for streamer ${aiStreamer.streamer_uuid}:`, error);
-  }
-
-  return {
-    id: aiStreamer.id.toString(),
-    name: aiStreamer.streamer_hr_name,
-    status: aiStreamer.is_alive === '1' || aiStreamer.is_alive === 1 ? 'active' : 'inactive',
-    resolution: '1920x1080', // Default
-    fps: 30, // Default
-    lastActivity: aiStreamer.updated_at || 'Unknown',
-    streamerUuid: aiStreamer.streamer_uuid,
-    streamerTypeUuid: aiStreamer.streamer_type_uuid,
-    configTemplateName: aiStreamer.config_template_name,
-    computeUnitIP: aiStreamer.compute_unit_ip || 'N/A',
-    features
-  };
-};
-
-// Calculate uptime from last seen
-const calculateUptime = (lastSeen: string): string => {
-  if (!lastSeen || lastSeen === 'Never') return '-';
-  
-  try {
-    const lastSeenDate = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - lastSeenDate.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (diffDays > 0) {
-      return `${diffDays}d ${diffHours}h`;
-    } else if (diffHours > 0) {
-      return `${diffHours}h`;
-    } else {
-      return '<1h';
-    }
-  } catch (error) {
-    return '-';
   }
 };
 
@@ -330,105 +200,39 @@ const deleteAppAssignment = async (computeUnitIP: string, assignmentUuid: string
 
 export const AppsPage: React.FC = () => {
   const { theme } = useTheme();
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [computeUnits, setComputeUnits] = useState<ComputeUnit[]>([]);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  
+  // Use centralized hook for all compute unit and camera data
+  const { computeUnits, loading, lastSyncTime, refresh } = useComputeUnitStatus({
+    componentName: 'AppsPage',
+    pollingInterval: 6000,    // Check every 6 seconds
+    autoCheckInterval: 8000,  // Ping every 8 seconds
+    enableAutoCheck: true,
+    enablePolling: true,
+    enableVisibilityRefresh: true,
+  });
   
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<{
-    name: string;
-    computeUnitIP: string;
-    features: string[];
-    unitId: string;
-    cameraId: string;
-    streamerUuid: string;
+    camera: any;
+    unit: any;
   } | null>(null);
-
-  // Load compute units and their cameras
-  const loadComputeUnitsWithCameras = async () => {
-    try {
-      console.log('Loading compute units and cameras for Apps page...');
-      
-      // Load compute units from backend
-      const backendUnits = await loadIOUnitsFromBackend();
-      
-      // For each unit, load its cameras
-      const unitsWithCameras = await Promise.all(
-        backendUnits.map(async (unit) => {
-          try {
-            if (unit.status === 'online') {
-              const cameraData = await getCamerasFromIOUnit(unit.ipAddress);
-              const cameras = await Promise.all(
-                cameraData.map((aiStreamer) => convertAIStreamerToCameraForApps(aiStreamer, unit.ipAddress))
-              );
-              return { ...unit, cameras };
-            } else {
-              // If unit is offline, cameras should be empty or marked as inactive
-              return { ...unit, cameras: [] };
-            }
-          } catch (error) {
-            console.error(`Failed to load cameras for unit ${unit.name}:`, error);
-            return { ...unit, cameras: [] };
-          }
-        })
-      );
-      
-      setComputeUnits(unitsWithCameras);
-      setLastSyncTime(new Date());
-      console.log('Loaded compute units with cameras:', unitsWithCameras);
-    } catch (error) {
-      console.error('Failed to load compute units and cameras:', error);
-    }
-  };
-
-  // Polling for real-time updates (every 10 seconds) - but pause when modal is open
-  useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      try {
-        if (!loading && !modalOpen) { // Don't poll if modal is open
-          console.log('🔄 Polling for Apps page updates...');
-          await loadComputeUnitsWithCameras();
-        } else if (modalOpen) {
-          console.log('⏸️ Polling paused - modal is open');
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [loading, modalOpen]);
-
-  // Handle page visibility changes - refresh when user comes back to the page
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        console.log('👀 Apps page became visible, refreshing data...');
-        await loadComputeUnitsWithCameras();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  // Load initial data on component mount
-  useEffect(() => {
-    loadComputeUnitsWithCameras();
-  }, []);
 
   // Format last sync time for display
   const formatLastSync = (date: Date | null) => {
     if (!date) return 'Never';
     const now = new Date();
     const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
+
+    if (diffSeconds < 5) return "just now";
     if (diffSeconds < 60) return `${diffSeconds}s ago`;
     if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
     return date.toLocaleTimeString();
   };
+
+  // When features change in the modal, we need to trigger a global refresh
+  // Remove unused function
 
   // Multi-select component for supported apps (Modal-based)
   const AppConfigurationModal: React.FC<{
@@ -872,17 +676,6 @@ export const AppsPage: React.FC = () => {
     );
   };
 
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await loadComputeUnitsWithCameras();
-    } catch (error) {
-      console.error('Refresh failed:', error);
-    } finally {
-      setTimeout(() => setLoading(false), 1000);
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -983,7 +776,7 @@ export const AppsPage: React.FC = () => {
         </div>
 
         <button
-          onClick={handleRefresh}
+          onClick={() => refresh()}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -1055,7 +848,7 @@ export const AppsPage: React.FC = () => {
                   <Cpu className="h-6 w-6 sm:h-8 sm:w-8 text-primary flex-shrink-0" />
                   <div className="min-w-0">
                     <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold text-foreground truncate">{unit.name}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{unit.ipAddress} • Uptime: {unit.uptime}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{unit.ipAddress} • Status: {unit.status}</p>
                   </div>
                 </div>
                 <span className={`px-3 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 ${getStatusBg(unit.status)} ${getStatusColor(unit.status)}`}>
@@ -1098,9 +891,9 @@ export const AppsPage: React.FC = () => {
 
                       {/* Active Apps - Grouped by App */}
                       <div className="space-y-3">
-                        {camera.features.length > 0 ? (() => {
+                        {(camera.features || []).length > 0 ? (() => {
                           // Group features by app
-                          const groupedFeatures = camera.features.reduce((acc, featureKey) => {
+                          const groupedFeatures = (camera.features || []).reduce((acc: Record<string, string[]>, featureKey: string) => {
                             const [appName, resultName] = featureKey.split('.', 2);
                             if (!acc[appName]) {
                               acc[appName] = [];
@@ -1112,6 +905,7 @@ export const AppsPage: React.FC = () => {
                           return Object.entries(groupedFeatures).map(([appName, results]) => {
                             // Get consistent color scheme for this app across all cameras
                             const colorScheme = getAppColorScheme(appName);
+                            const resultsArray = results as string[];
                             return (
                               <div key={appName} className="space-y-2">
                                 {/* App Name Header */}
@@ -1123,13 +917,13 @@ export const AppsPage: React.FC = () => {
                                   }`}></div>
                                   <span className={`text-xs font-semibold ${colorScheme.text} truncate`}>{appName}</span>
                                   <span className={`text-xs opacity-75 ${colorScheme.text} flex-shrink-0`}>
-                                    ({results.length} result{results.length > 1 ? 's' : ''})
+                                    ({resultsArray.length} result{resultsArray.length > 1 ? 's' : ''})
                                   </span>
                                 </div>
                                 
                                 {/* Results */}
                                 <div className="flex flex-wrap gap-1 ml-2 sm:ml-4">
-                                  {results.map((resultName) => (
+                                  {resultsArray.map((resultName: string) => (
                                     <span
                                       key={`${appName}.${resultName}`}
                                       className={`px-2 py-1 rounded text-xs font-medium ${colorScheme.bg} ${colorScheme.text} border ${colorScheme.border} opacity-90 truncate max-w-full`}
@@ -1158,12 +952,8 @@ export const AppsPage: React.FC = () => {
                       <button
                         onClick={() => {
                           setSelectedCamera({
-                            name: camera.name,
-                            computeUnitIP: unit.ipAddress,
-                            features: camera.features,
-                            unitId: unit.id,
-                            cameraId: camera.id,
-                            streamerUuid: camera.streamerUuid
+                            camera: camera,
+                            unit: unit
                           });
                           setModalOpen(true);
                         }}
@@ -1211,52 +1001,23 @@ export const AppsPage: React.FC = () => {
               console.log('⏰ Modal closed, next polling cycle will begin soon...');
             }, 2000);
           }}
-          cameraName={selectedCamera.name}
-          computeUnitIP={selectedCamera.computeUnitIP}
-          streamerUuid={selectedCamera.streamerUuid}
-          selectedFeatures={selectedCamera.features}
+          cameraName={selectedCamera.camera.name}
+          computeUnitIP={selectedCamera.unit.ipAddress}
+          streamerUuid={selectedCamera.camera.streamerUuid}
+          selectedFeatures={selectedCamera.camera.features || []}
           onFeaturesChange={(features: string[]) => {
-            console.log(`🔄 [Main] Updating features for camera ${selectedCamera.cameraId} (streamer: ${selectedCamera.streamerUuid}):`, features);
+            console.log(`🔄 [Main] Updating features for camera ${selectedCamera.camera.id} (streamer: ${selectedCamera.camera.streamerUuid}):`, features);
             console.log(`🎯 [Main] Camera details:`, {
-              cameraId: selectedCamera.cameraId,
-              cameraName: selectedCamera.name,
-              streamerUuid: selectedCamera.streamerUuid,
-              unitId: selectedCamera.unitId,
-              computeUnitIP: selectedCamera.computeUnitIP
+              cameraId: selectedCamera.camera.id,
+              cameraName: selectedCamera.camera.name,
+              streamerUuid: selectedCamera.camera.streamerUuid,
+              unitId: selectedCamera.unit.id,
+              computeUnitIP: selectedCamera.unit.ipAddress
             });
             
-            // Update the camera features in the state
-            setComputeUnits(prev => {
-              const updated = prev.map(u => 
-                u.id === selectedCamera.unitId 
-                  ? {
-                      ...u,
-                      cameras: u.cameras.map(c => 
-                        c.id === selectedCamera.cameraId
-                          ? { ...c, features }
-                          : c
-                      )
-                    }
-                  : u
-              );
-              
-              console.log(`📋 [Main] Updated compute units state:`, updated.map(u => ({
-                unitId: u.id,
-                unitName: u.name,
-                cameras: u.cameras.map(c => ({
-                  cameraId: c.id,
-                  cameraName: c.name,
-                  streamerUuid: c.streamerUuid,
-                  featuresCount: c.features.length,
-                  features: c.features
-                }))
-              })));
-              
-              return updated;
-            });
-            
-            // Update the selectedCamera state as well
-            setSelectedCamera(prev => prev ? { ...prev, features } : null);
+            // The centralized hook will automatically update the state via polling
+            // No need to manually update state here - just trigger a refresh to sync faster
+            refresh();
           }}
         />
       )}
