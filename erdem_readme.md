@@ -10,6 +10,6 @@ npm run dev:full
 
 -package.json'da başlatma seçenğini ayarla
 
-npm run backend:setup
+npm run backend:setup  ( KURULUM YAPARKEN TEK SEFERLİK)
 
-npm run dev:full
+npm run dev:full (GENELDE)
