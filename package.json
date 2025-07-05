@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "backend:setup": "cd backend && python -m venv venv && venv\\Scripts\\pip install -r requirements.txt",
     "backend:setup:unix": "cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
-    "backend:dev": "cd backend && python app.py",
+    "backend:dev": "cd backend && C:\\Users\\Levovo20x\\Documents\\GitHub\\virtue-local-admin-dashboard\\backend\\venv\\Scripts\\activate.bat && python app.py",
     "backend:dev:unix": "cd backend && python3 app.py",
     "backend:prod": "cd backend && venv\\Scripts\\gunicorn -w 4 -b 0.0.0.0:8000 app:app",
     "backend:prod:unix": "cd backend && ./venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app",

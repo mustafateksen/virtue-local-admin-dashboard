@@ -11,3 +11,5 @@ npm run dev:full
 -package.json'da başlatma seçenğini ayarla
 
 npm run backend:setup
+
+npm run dev:full
