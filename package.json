@@ -8,10 +8,14 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "backend:setup": "cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
-    "backend:dev": "cd backend && python3 app.py",
-    "backend:prod": "cd backend && ./venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app",
+    "backend:setup": "cd backend && python -m venv venv && venv\\Scripts\\pip install -r requirements.txt",
+    "backend:setup:unix": "cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
+    "backend:dev": "cd backend && python app.py",
+    "backend:dev:unix": "cd backend && python3 app.py",
+    "backend:prod": "cd backend && venv\\Scripts\\gunicorn -w 4 -b 0.0.0.0:8000 app:app",
+    "backend:prod:unix": "cd backend && ./venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app",
     "dev:full": "concurrently \"npm run backend:dev\" \"npm run dev\"",
+    "dev:full:unix": "concurrently \"npm run backend:dev:unix\" \"npm run dev\"",
     "start": "npm run dev:full"
   },
   "dependencies": {
