@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend Database Files
+backend/instance/
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+backend/database.db
+backend/app.db
+
+# Python
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/*.pyc
+backend/.env
+backend/venv/
+backend/env/
